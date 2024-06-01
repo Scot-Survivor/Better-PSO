@@ -37,6 +37,12 @@ struct AppConfig {
     double cognitive_factor = 1.0;
     double social_factor = 1.0;
     double inertia_weight = 1.0;
+
+    double min_x = -64.0;
+    double max_x = 64.0;
+
+    double min_y = -64.0;
+    double max_y = 64.0;
 };
 
 
@@ -169,8 +175,11 @@ int main(int, char**)
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                             ImGuiWindowFlags_NoCollapse |ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse |
+                                                             ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground);
         if (ImPlot::BeginPlot("PSO")) {
+            ImPlot::SetupAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
             ImPlot::PlotScatter("Particles", &particles[0].x, &particles[0].y, config.n_particles);
             ImPlot::EndPlot();
         }
