@@ -14,9 +14,57 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl2.h"
+#include "implot.h"
 #include <stdio.h>
 #include <SDL.h>
 #include <SDL_opengl.h>
+
+
+double fitness_function(double x, double y) {
+    return x * x + y * y;
+}
+
+struct Particle {
+    double x;
+    double y;
+    double best_x;
+    double best_y;
+    double best_fitness;
+};
+
+struct AppConfig {
+    int n_particles = 100;
+    double cognitive_factor = 1.0;
+    double social_factor = 1.0;
+    double inertia_weight = 1.0;
+};
+
+
+void update_particles(Particle* particles, AppConfig config) {
+    for (int i = 0; i < config.n_particles; i++) {
+        double x = particles[i].x;
+        double y = particles[i].y;
+        double best_x = particles[i].best_x;
+        double best_y = particles[i].best_y;
+        double best_fitness = particles[i].best_fitness;
+
+        double r1 = (double)rand() / RAND_MAX;
+        double r2 = (double)rand() / RAND_MAX;
+
+        double new_x = x + config.inertia_weight * x +
+                config.cognitive_factor * r1 * (best_x - x) + config.social_factor * r2 * (best_x - x);
+        double new_y = y + config.inertia_weight * y +
+                config.cognitive_factor * r1 * (best_y - y) + config.social_factor * r2 * (best_y - y);
+
+        double new_fitness = fitness_function(new_x, new_y);
+        if (new_fitness < best_fitness) {
+            particles[i].best_x = new_x;
+            particles[i].best_y = new_y;
+            particles[i].best_fitness = new_fitness;
+        }
+    }
+}
+
 
 // Main code
 int main(int, char**)
@@ -39,8 +87,9 @@ int main(int, char**)
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Window* window = SDL_CreateWindow("Particle Swarm Optimisation", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                          1280, 720, window_flags);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -48,6 +97,7 @@ int main(int, char**)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
@@ -77,9 +127,19 @@ int main(int, char**)
     //IM_ASSERT(font != nullptr);
 
     // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
+    bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    Particle particles[100];
+
+    for (int i = 0; i < 100; i++) {
+        particles[i].x = (double)rand() / RAND_MAX;
+        particles[i].y = (double)rand() / RAND_MAX;
+        particles[i].best_x = particles[i].x;
+        particles[i].best_y = particles[i].y;
+        particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y);
+    }
+
+    AppConfig config;
 
     // Main loop
     bool done = false;
@@ -109,38 +169,12 @@ int main(int, char**)
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
+        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImPlot::BeginPlot("PSO")) {
+            ImPlot::PlotScatter("Particles", &particles[0].x, &particles[0].y, config.n_particles);
+            ImPlot::EndPlot();
         }
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
+        ImGui::End();
 
         // Rendering
         ImGui::Render();
@@ -155,6 +189,7 @@ int main(int, char**)
     // Cleanup
     ImGui_ImplOpenGL2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     SDL_GL_DeleteContext(gl_context);
