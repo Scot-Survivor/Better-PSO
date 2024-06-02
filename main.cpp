@@ -98,8 +98,9 @@ void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredC
         double new_x = particles[i].x + config->inertia_weight * cognitive_component_x + social_component_x;
         double new_y = particles[i].y + config->inertia_weight * cognitive_component_y + social_component_y;
 
+#ifdef DEBUG
         printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
-
+#endif
         double new_fitness = fitness_function(new_x, new_y, config);
         if (new_fitness < particles[i].best_fitness) {
             particles[i].best_x = new_x;
