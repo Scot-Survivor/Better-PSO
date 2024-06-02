@@ -21,7 +21,7 @@
 
 
 double fitness_function(double x, double y) {
-    return x * x + y * y;
+    return std::pow(x, 2) * std::pow(y, 2) - 24 * x * y + std::pow(y, 2) - (8 * y) + 160;
 }
 
 struct Particle {
@@ -33,41 +33,67 @@ struct Particle {
 };
 
 struct AppConfig {
-    int n_particles = 100;
-    double cognitive_factor = 1.0;
-    double social_factor = 1.0;
-    double inertia_weight = 1.0;
+    int n_particles = 5;
+    float cognitive_factor = 0.5;
+    float social_factor = 0.8;
+    float inertia_weight = 0.5;
 
-    double min_x = -64.0;
-    double max_x = 64.0;
+    int min_x = -64.0;
+    int max_x = 64.0;
 
-    double min_y = -64.0;
-    double max_y = 64.0;
+    int min_y = -64.0;
+    int max_y = 64.0;
+
+    int max_iterations = 1000;
+
+
+    double global_best_x;
+    double global_best_y;
+    double global_best_fitness = 1e12;
+};
+
+struct UpdateCycle {
+    Particle *particles;
+    int iterations;
 };
 
 
-void update_particles(Particle* particles, AppConfig config) {
-    for (int i = 0; i < config.n_particles; i++) {
-        double x = particles[i].x;
-        double y = particles[i].y;
-        double best_x = particles[i].best_x;
-        double best_y = particles[i].best_y;
-        double best_fitness = particles[i].best_fitness;
+void update_particles(UpdateCycle* cycle, AppConfig* config) {
+    Particle* particles = cycle->particles;
+    for (int i = 0; i < config->n_particles; i++) {
 
-        double r1 = (double)rand() / RAND_MAX;
-        double r2 = (double)rand() / RAND_MAX;
+        double cognitive_component_x = config->cognitive_factor * (particles[i].best_x - particles[i].x);
+        double cognitive_component_y = config->cognitive_factor * (particles[i].best_y - particles[i].y);
 
-        double new_x = x + config.inertia_weight * x +
-                config.cognitive_factor * r1 * (best_x - x) + config.social_factor * r2 * (best_x - x);
-        double new_y = y + config.inertia_weight * y +
-                config.cognitive_factor * r1 * (best_y - y) + config.social_factor * r2 * (best_y - y);
+        double social_component_x = config->social_factor * (config->global_best_x - particles[i].x);
+        double social_component_y = config->social_factor * (config->global_best_y - particles[i].y);
+
+        double new_x = particles[i].x + config->inertia_weight * cognitive_component_x + social_component_x;
+        double new_y = particles[i].y + config->inertia_weight * cognitive_component_y + social_component_y;
+
+        printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
 
         double new_fitness = fitness_function(new_x, new_y);
-        if (new_fitness < best_fitness) {
+        if (new_fitness < particles[i].best_fitness) {
             particles[i].best_x = new_x;
             particles[i].best_y = new_y;
             particles[i].best_fitness = new_fitness;
         }
+        if (new_fitness < config->global_best_fitness) {
+            config->global_best_x = new_x;
+            config->global_best_y = new_y;
+            config->global_best_fitness = new_fitness;
+        }
+        particles[i].x = new_x;
+        particles[i].y = new_y;
+    }
+    cycle->iterations++;
+}
+
+
+void print_particles(Particle* particles, int n_particles) {
+    for (int i = 0; i < n_particles; i++) {
+        printf("Particle %d: x = %f, y = %f, best_x = %f, best_y = %f, best_fitness = %f\n", i, particles[i].x, particles[i].y, particles[i].best_x, particles[i].best_y, particles[i].best_fitness);
     }
 }
 
@@ -135,19 +161,23 @@ int main(int, char**)
     // Our state
     bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    Particle particles[100];
+    AppConfig config;
+    Particle particles[config.n_particles];
+    UpdateCycle cycle = {particles, 0};
 
-    for (int i = 0; i < 100; i++) {
-        particles[i].x = (double)rand() / RAND_MAX;
-        particles[i].y = (double)rand() / RAND_MAX;
+    for (int i = 0; i < config.n_particles; i++) {
+        particles[i].x = config.min_x + (double) (rand()) / ((double) (RAND_MAX / (config.max_x - config.min_x)));
+        particles[i].y = config.min_y + (double) (rand()) / ((double) (RAND_MAX / (config.max_y - config.min_y)));
         particles[i].best_x = particles[i].x;
         particles[i].best_y = particles[i].y;
         particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y);
+        if (particles[i].best_fitness < config.global_best_fitness) {
+            config.global_best_x = particles[i].best_x;
+            config.global_best_y = particles[i].best_y;
+            config.global_best_fitness = particles[i].best_fitness;
+        }
     }
 
-    AppConfig config;
-
-    // Main loop
     bool done = false;
     while (!done)
     {
@@ -175,15 +205,33 @@ int main(int, char**)
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                              ImGuiWindowFlags_NoCollapse |ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse |
                                                              ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground);
-        if (ImPlot::BeginPlot("PSO")) {
-            ImPlot::SetupAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
-            ImPlot::PlotScatter("Particles", &particles[0].x, &particles[0].y, config.n_particles);
+
+
+        ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
+
+        if (ImPlot::BeginPlot("PSO", "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
+                              ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoTitle | ImPlotFlags_NoFrame)) {
+            // ImPlot::SetupAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
+            double* xs = new double[config.n_particles];
+            double* ys = new double[config.n_particles];
+            for (int i = 0; i < config.n_particles; i++) {
+                xs[i] = cycle.particles[i].x;
+                ys[i] = cycle.particles[i].y;
+            }
+            ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
             ImPlot::EndPlot();
         }
         ImGui::End();
+
+        if (ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * 2) == 0 || ImGui::GetFrameCount() == 0) {
+            update_particles(&cycle, &config);
+        }
+
 
         // Rendering
         ImGui::Render();
