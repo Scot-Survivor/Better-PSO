@@ -8,6 +8,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: Submodule update
       run: git submodule update --init --recursive
+    - name: Install dependencies
+      run: sudo apt-get install libgl1-mesa-dev
     - name: Set up CMake
       uses: threeal/cmake-action@v1.3.0
       with:
