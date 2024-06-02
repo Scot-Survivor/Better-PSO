@@ -15,16 +15,12 @@
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl2.h"
 #include "implot.h"
-#include <stdio.h>
+#include <cstdio>
 #include <SDL.h>
 #include <SDL_opengl.h>
 #include <string>
 #include <vector>
-
-
-double fitness_function(double x, double y) {
-    return std::pow(x, 2) * std::pow(y, 2) - 24 * x * y + std::pow(y, 2) - (8 * y) + 160;
-}
+#include <cmath>
 
 struct Particle {
     double x;
@@ -50,9 +46,12 @@ struct AppConfig {
     int max_iterations = 1000;
 
 
-    double global_best_x;
-    double global_best_y;
+    double global_best_x{};
+    double global_best_y{};
     double global_best_fitness = 1e12;
+
+    double goal_x = 0;
+    double goal_y = 0;
 };
 
 struct UpdateCycle {
@@ -63,7 +62,16 @@ struct UpdateCycle {
 struct StoredCycle {
     Particle *particles;
     int iterations;
+    int n_particles;
 };
+
+
+/*
+ * Fitness function, the lower the better
+ */
+double fitness_function(double x, double y, AppConfig* config) {
+    return std::sqrt(std::pow(x - config->goal_x, 2) + std::pow(y - config->goal_y, 2));
+}
 
 
 StoredCycle create_stored_cycle(Particle* particles, int iterations, int n_particles) {
@@ -71,7 +79,7 @@ StoredCycle create_stored_cycle(Particle* particles, int iterations, int n_parti
     for (int i = 0; i < 5; i++) {
         new_particles[i] = particles[i];
     }
-    return {new_particles, iterations};
+    return {new_particles, iterations, n_particles};
 }
 
 void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredCycle> *cycles) {
@@ -91,7 +99,7 @@ void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredC
 
         printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
 
-        double new_fitness = fitness_function(new_x, new_y);
+        double new_fitness = fitness_function(new_x, new_y, config);
         if (new_fitness < particles[i].best_fitness) {
             particles[i].best_x = new_x;
             particles[i].best_y = new_y;
@@ -108,6 +116,24 @@ void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredC
     cycle->iterations++;
 
     cycles->push_back(create_stored_cycle(particles, cycle->iterations, config->n_particles));
+}
+
+
+Particle* initialise_particles(int n_particles, AppConfig* config) {
+    auto* particles = new Particle[n_particles];
+    for (int i = 0; i < n_particles; i++) {
+        particles[i].x = config->min_x + (double) (rand()) / ((double) (RAND_MAX / (config->max_x - config->min_x)));
+        particles[i].y = config->min_y + (double) (rand()) / ((double) (RAND_MAX / (config->max_y - config->min_y)));
+        particles[i].best_x = particles[i].x;
+        particles[i].best_y = particles[i].y;
+        particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y, config);
+        if (particles[i].best_fitness < config->global_best_fitness) {
+            config->global_best_x = particles[i].best_x;
+            config->global_best_y = particles[i].best_y;
+            config->global_best_fitness = particles[i].best_fitness;
+        }
+    }
+    return particles;
 }
 
 
@@ -175,23 +201,12 @@ int main(int, char**)
     bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     AppConfig config;
-    Particle particles[config.n_particles];
-    UpdateCycle cycle = {particles, 0};
     std::vector<StoredCycle> cycles;
 
-    for (int i = 0; i < config.n_particles; i++) {
-        particles[i].x = config.min_x + (double) (rand()) / ((double) (RAND_MAX / (config.max_x - config.min_x)));
-        particles[i].y = config.min_y + (double) (rand()) / ((double) (RAND_MAX / (config.max_y - config.min_y)));
-        particles[i].best_x = particles[i].x;
-        particles[i].best_y = particles[i].y;
-        particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y);
-        if (particles[i].best_fitness < config.global_best_fitness) {
-            config.global_best_x = particles[i].best_x;
-            config.global_best_y = particles[i].best_y;
-            config.global_best_fitness = particles[i].best_fitness;
-        }
-    }
+    Particle* particles = initialise_particles(config.n_particles, &config);
+    UpdateCycle cycle = {particles, 0};
     cycles.push_back(create_stored_cycle(particles, cycle.iterations, config.n_particles));
+
     bool do_pso = false;
 
     bool done = false;
@@ -233,8 +248,8 @@ int main(int, char**)
 
         std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " + std::to_string(cycle.iterations);
         if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
-                              ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
-            // ImPlot::SetupAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
+                               ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
+
             auto* xs = new double[config.n_particles];
             auto* ys = new double[config.n_particles];
             for (int i = 0; i < config.n_particles; i++) {
@@ -242,8 +257,13 @@ int main(int, char**)
                 ys[i] = cycle.particles[i].y;
             }
 
-            // Prevent auto scaling of the graph
             ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
+
+            ys[0] = config.goal_y;
+            xs[0] = config.goal_x;
+            ImPlot::PushStyleColor(ImPlotCol_MarkerOutline, ImVec4(1, 0, 0, 1));
+            ImPlot::PlotScatter("Goal", xs, ys, 1);
+            ImPlot::PopStyleColor();
 
             ImPlot::EndPlot();
         }
@@ -269,6 +289,16 @@ int main(int, char**)
         if (ImGui::Button(">")) {
             update_particles(&cycle, &config, &cycles);
         }
+
+        ImGui::InputInt("Number of Particles", &config.n_particles, 1, 1000);
+        // If this changes we must reset cycles and reinitialise particles
+        if (config.n_particles != cycles.back().n_particles) {
+            cycles.clear();
+            particles = initialise_particles(config.n_particles, &config);
+            cycle = {particles, 0};
+            cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+        }
+
         ImGui::SliderFloat("Cognitive Factor", &config.cognitive_factor, 0.0, 1.0);
         ImGui::SliderFloat("Social Factor", &config.social_factor, 0.0, 1.0);
         ImGui::SliderFloat("Inertia Weight", &config.inertia_weight, 0.0, 1.0);
