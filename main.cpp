@@ -265,6 +265,11 @@ int main(int, char**)
             ImPlot::PlotScatter("Goal", xs, ys, 1);
             ImPlot::PopStyleColor();
 
+            if (ImGui::GetIO().MouseClicked[0]) {
+                config.goal_x = ImPlot::GetPlotMousePos().x;
+                config.goal_y = ImPlot::GetPlotMousePos().y;
+            }
+
             ImPlot::EndPlot();
         }
         ImGui::End();
