@@ -31,13 +31,11 @@ jobs:
         path: build/Better_PSO
 
   build-win:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2
     - name: Submodule update
       run: git submodule update --init --recursive
-    - name: Install dependencies
-      run: choco install -y visualstudio2019buildtools
     - name: Set up CMake
       uses: threeal/cmake-action@v1.3.0
       with:
