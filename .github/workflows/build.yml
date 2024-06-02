@@ -29,4 +29,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-${{ steps.calculate-version.outputs.version-string }}
-        path: build
+        path: build/Better_PSO
