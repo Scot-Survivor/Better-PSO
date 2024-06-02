@@ -280,6 +280,15 @@ int main(int, char**)
             do_pso = !do_pso;
         }
         ImGui::SameLine();
+
+        if (ImGui::Button("Reset")) {
+            cycles.clear();
+            particles = initialise_particles(config.n_particles, &config);
+            cycle = {particles, 0};
+            cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+        }
+
+        ImGui::SameLine();
         // Backward arrow
         if (ImGui::Button("<")) {
             if (!cycles.empty() && cycles.size() - 1 >= 1 && cycle.iterations > 0) {
