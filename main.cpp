@@ -68,6 +68,7 @@ struct StoredCycle {
 
 /*
  * Fitness function, the lower the better
+ * hence why we use the euclidean distance
  */
 double fitness_function(double x, double y, AppConfig* config) {
     return std::sqrt(std::pow(x - config->goal_x, 2) + std::pow(y - config->goal_y, 2));
@@ -286,6 +287,9 @@ int main(int, char**)
             particles = initialise_particles(config.n_particles, &config);
             cycle = {particles, 0};
             cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+            config.global_best_x = 0;
+            config.global_best_y = 0;
+            config.global_best_fitness = 1e12;
         }
 
         ImGui::SameLine();
