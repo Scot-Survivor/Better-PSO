@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <SDL.h>
 #include <SDL_opengl.h>
+#include <string>
+#include <vector>
 
 
 double fitness_function(double x, double y) {
@@ -37,6 +39,7 @@ struct AppConfig {
     float cognitive_factor = 0.5;
     float social_factor = 0.8;
     float inertia_weight = 0.5;
+    float seconds_per_iteration = 1;
 
     int min_x = -64.0;
     int max_x = 64.0;
@@ -57,16 +60,31 @@ struct UpdateCycle {
     int iterations;
 };
 
+struct StoredCycle {
+    Particle *particles;
+    int iterations;
+};
 
-void update_particles(UpdateCycle* cycle, AppConfig* config) {
+
+StoredCycle create_stored_cycle(Particle* particles, int iterations, int n_particles) {
+    auto* new_particles = new Particle[n_particles];
+    for (int i = 0; i < 5; i++) {
+        new_particles[i] = particles[i];
+    }
+    return {new_particles, iterations};
+}
+
+void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredCycle> *cycles) {
     Particle* particles = cycle->particles;
     for (int i = 0; i < config->n_particles; i++) {
+        double r1 = (double) (rand()) / ((double) (RAND_MAX));
+        double r2 = (double) (rand()) / ((double) (RAND_MAX));
 
-        double cognitive_component_x = config->cognitive_factor * (particles[i].best_x - particles[i].x);
-        double cognitive_component_y = config->cognitive_factor * (particles[i].best_y - particles[i].y);
+        double cognitive_component_x = config->cognitive_factor * r1 * (particles[i].best_x - particles[i].x);
+        double cognitive_component_y = config->cognitive_factor * r1 * (particles[i].best_y - particles[i].y);
 
-        double social_component_x = config->social_factor * (config->global_best_x - particles[i].x);
-        double social_component_y = config->social_factor * (config->global_best_y - particles[i].y);
+        double social_component_x = config->social_factor * r2 * (config->global_best_x - particles[i].x);
+        double social_component_y = config->social_factor * r2 * (config->global_best_y - particles[i].y);
 
         double new_x = particles[i].x + config->inertia_weight * cognitive_component_x + social_component_x;
         double new_y = particles[i].y + config->inertia_weight * cognitive_component_y + social_component_y;
@@ -88,13 +106,8 @@ void update_particles(UpdateCycle* cycle, AppConfig* config) {
         particles[i].y = new_y;
     }
     cycle->iterations++;
-}
 
-
-void print_particles(Particle* particles, int n_particles) {
-    for (int i = 0; i < n_particles; i++) {
-        printf("Particle %d: x = %f, y = %f, best_x = %f, best_y = %f, best_fitness = %f\n", i, particles[i].x, particles[i].y, particles[i].best_x, particles[i].best_y, particles[i].best_fitness);
-    }
+    cycles->push_back(create_stored_cycle(particles, cycle->iterations, config->n_particles));
 }
 
 
@@ -164,6 +177,7 @@ int main(int, char**)
     AppConfig config;
     Particle particles[config.n_particles];
     UpdateCycle cycle = {particles, 0};
+    std::vector<StoredCycle> cycles;
 
     for (int i = 0; i < config.n_particles; i++) {
         particles[i].x = config.min_x + (double) (rand()) / ((double) (RAND_MAX / (config.max_x - config.min_x)));
@@ -177,6 +191,8 @@ int main(int, char**)
             config.global_best_fitness = particles[i].best_fitness;
         }
     }
+    cycles.push_back(create_stored_cycle(particles, cycle.iterations, config.n_particles));
+    bool do_pso = false;
 
     bool done = false;
     while (!done)
@@ -209,27 +225,66 @@ int main(int, char**)
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                              ImGuiWindowFlags_NoCollapse |ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse |
-                                                             ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground);
+                                                             ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
 
 
         ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
 
-        if (ImPlot::BeginPlot("PSO", "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
-                              ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoTitle | ImPlotFlags_NoFrame)) {
+        std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " + std::to_string(cycle.iterations);
+        if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
+                              ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
             // ImPlot::SetupAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
-            double* xs = new double[config.n_particles];
-            double* ys = new double[config.n_particles];
+            auto* xs = new double[config.n_particles];
+            auto* ys = new double[config.n_particles];
             for (int i = 0; i < config.n_particles; i++) {
                 xs[i] = cycle.particles[i].x;
                 ys[i] = cycle.particles[i].y;
             }
+
+            // Prevent auto scaling of the graph
             ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
+
             ImPlot::EndPlot();
         }
         ImGui::End();
 
-        if (ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * 2) == 0 || ImGui::GetFrameCount() == 0) {
-            update_particles(&cycle, &config);
+        ImGui::Begin("Configuration");
+        std::string button_text = do_pso ? "Stop PSO" : "Start PSO";
+        if (ImGui::Button(button_text.c_str())) {
+            do_pso = !do_pso;
+        }
+        ImGui::SameLine();
+        // Backward arrow
+        if (ImGui::Button("<")) {
+            if (!cycles.empty() && cycles.size() - 1 >= 1 && cycle.iterations > 0) {
+                cycles.pop_back();
+                StoredCycle c = cycles.back();
+                cycle.particles = c.particles;
+                cycle.iterations = c.iterations;
+            }
+        }
+        ImGui::SameLine();
+        // Forward arrow
+        if (ImGui::Button(">")) {
+            update_particles(&cycle, &config, &cycles);
+        }
+        ImGui::SliderFloat("Cognitive Factor", &config.cognitive_factor, 0.0, 1.0);
+        ImGui::SliderFloat("Social Factor", &config.social_factor, 0.0, 1.0);
+        ImGui::SliderFloat("Inertia Weight", &config.inertia_weight, 0.0, 1.0);
+        ImGui::InputFloat("Seconds per Iteration", &config.seconds_per_iteration, 0.1, 10.0);
+        ImGui::InputInt("Min X", &config.min_x, -100.0, 100.0);
+        ImGui::InputInt("Max X", &config.max_x, -100.0, 100.0);
+        ImGui::InputInt("Min Y", &config.min_y, -100.0, 100.0);
+        ImGui::InputInt("Max Y", &config.max_y, -100.0, 100.0);
+        ImGui::InputInt("Max Iterations", &config.max_iterations, 1, 10000);
+
+        ImGui::End();
+
+        if ( do_pso && (
+                ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
+                ImGui::GetFrameCount() == 0)) {
+            update_particles(&cycle, &config, &cycles);
         }
 
 
