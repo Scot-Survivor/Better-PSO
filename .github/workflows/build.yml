@@ -13,8 +13,7 @@ jobs:
           create_tag: true
           tag_prefix: 'tags'
       - name: Use version
-        run:
-          echo "Calculated version: ${{ steps.calculate-version.outputs.version-string }}"
+        run: 'echo "Calculated version: ${{ steps.calculate-version.outputs.version-string }}"'
   build:
     runs-on: ubuntu-latest
     steps:
