@@ -25,8 +25,8 @@ jobs:
         cmake-version: '3.17.0'
     - name: Build
       run: cmake -B build && cmake --build build --config Debug -j 4
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4.3.3
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v4
       with:
         name: build-${{ steps.calculate-version.outputs.version-string }}
         path: build
