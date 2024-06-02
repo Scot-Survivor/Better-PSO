@@ -331,7 +331,7 @@ int main(int, char**)
 
         if ( do_pso && (
                 ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
-                ImGui::GetFrameCount() == 0)) {
+                ImGui::GetFrameCount() == 0) && cycle.iterations < config.max_iterations) {
             update_particles(&cycle, &config, &cycles);
         }
 
