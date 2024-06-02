@@ -11,7 +11,6 @@ jobs:
       with:
         main_branch: master
         create_tag: true
-        tag_prefix: 'tags'
     - name: Use version
       run: 'echo "Calculated version: ${{ steps.calculate-version.outputs.version-string }}"'
     - uses: actions/checkout@v2
