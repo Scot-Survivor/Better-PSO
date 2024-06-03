@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <fstream>
+#include <sstream>
 
 struct Particle {
     double x;
@@ -138,6 +140,112 @@ Particle* initialise_particles(int n_particles, AppConfig* config) {
     return particles;
 }
 
+void write_cycles_to_file(const std::vector<StoredCycle>& cycles, const std::string& filename, AppConfig* config) {
+    FILE* file = fopen(filename.c_str(), "w");
+    if (file == nullptr) {
+        printf("Error opening file\n");
+        return;
+    }
+    // Save config
+    fprintf(file, "n_particles,%d\n", config->n_particles);
+    fprintf(file, "cognitive_factor,%f\n", config->cognitive_factor);
+    fprintf(file, "social_factor,%f\n", config->social_factor);
+    fprintf(file, "inertia_weight,%f\n", config->inertia_weight);
+    fprintf(file, "seconds_per_iteration,%f\n", config->seconds_per_iteration);
+    fprintf(file, "min_x,%d\n", config->min_x);
+    fprintf(file, "max_x,%d\n", config->max_x);
+    fprintf(file, "min_y,%d\n", config->min_y);
+    fprintf(file, "max_y,%d\n", config->max_y);
+    fprintf(file, "max_iterations,%d\n", config->max_iterations);
+    fprintf(file, "goal_x,%f\n", config->goal_x);
+    fprintf(file, "goal_y,%f\n", config->goal_y);
+    fprintf(file, "\n\n\n\n");
+
+
+    for (auto &cycle : cycles) {
+        for (int i = 0; i < cycle.n_particles; i++) {
+            fprintf(file, "%f,%f,", cycle.particles[i].x, cycle.particles[i].y);
+        }
+        fprintf(file, "\n");
+    }
+
+
+    fclose(file);
+
+}
+
+std::vector<StoredCycle> read_cycles_from_file(const std::string& filename, AppConfig* config){
+    std::vector<StoredCycle> cycles;
+    std::fstream file;
+    file.open(filename, std::ios::in);
+    if (!file.is_open()) {
+        printf("Error opening file\n");
+        return cycles;
+    }
+    std::string line;
+    int iter = 0;
+
+    // Load config
+    while (std::getline(file, line)){
+        if (line.empty() && line[0] != '\n') {
+            break;
+        }
+        std::string key = line.substr(0, line.find(","));
+        std::string value = line.substr(line.find(",") + 1);
+        if (key == "n_particles") {
+            config->n_particles = std::stoi(value);
+        } else if (key == "cognitive_factor") {
+            config->cognitive_factor = std::stof(value);
+        } else if (key == "social_factor") {
+            config->social_factor = std::stof(value);
+        } else if (key == "inertia_weight") {
+            config->inertia_weight = std::stof(value);
+        } else if (key == "seconds_per_iteration") {
+            config->seconds_per_iteration = std::stof(value);
+        } else if (key == "min_x") {
+            config->min_x = std::stoi(value);
+        } else if (key == "max_x") {
+            config->max_x = std::stoi(value);
+        } else if (key == "min_y") {
+            config->min_y = std::stoi(value);
+        } else if (key == "max_y") {
+            config->max_y = std::stoi(value);
+        } else if (key == "max_iterations") {
+            config->max_iterations = std::stoi(value);
+        } else if (key == "goal_x") {
+            config->goal_x = std::stof(value);
+        } else if (key == "goal_y") {
+            config->goal_y = std::stof(value);
+        }
+    }
+
+    // Load data
+    while (std::getline(file, line)) {
+        // Skip empty lines
+        if (line.empty()) {
+            continue;
+        }
+
+        auto* particles = new Particle[config->n_particles];
+        int i = 0;
+        std::string token;
+        std::istringstream tokenStream(line);
+        while (std::getline(tokenStream, token, ',')) {
+            if (i % 2 == 0) {
+                particles[i / 2].x = std::stof(token);
+            } else {
+                particles[i / 2].y = std::stof(token);
+            }
+            i++;
+        }
+        cycles.push_back({particles, iter, config->n_particles});
+        iter++;
+    }
+
+    file.close();
+    return cycles;
+}
+
 
 // Main code
 int main(int, char**)
@@ -208,6 +316,7 @@ int main(int, char**)
     Particle* particles = initialise_particles(config.n_particles, &config);
     UpdateCycle cycle = {particles, 0};
     cycles.push_back(create_stored_cycle(particles, cycle.iterations, config.n_particles));
+    char filename[1024] = "cycles.csv";
 
     bool do_pso = false;
 
@@ -276,7 +385,7 @@ int main(int, char**)
         }
         ImGui::End();
 
-        ImGui::Begin("Configuration");
+        ImGui::Begin("Controls");
         std::string button_text = do_pso ? "Stop PSO" : "Start PSO";
         if (ImGui::Button(button_text.c_str())) {
             do_pso = !do_pso;
@@ -308,6 +417,23 @@ int main(int, char**)
         if (ImGui::Button(">")) {
             update_particles(&cycle, &config, &cycles);
         }
+
+        ImGui::InputText("Filename", filename, 1024);
+
+        if (ImGui::Button("Save")) {
+            write_cycles_to_file(cycles, filename, &config);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load")) {
+            cycles = read_cycles_from_file(filename, &config);
+            StoredCycle c = cycles.back();
+            cycle.particles = c.particles;
+            cycle.iterations = c.iterations;
+        }
+
+        ImGui::End();
+
+        ImGui::Begin("Configuration");
 
         ImGui::InputInt("Number of Particles", &config.n_particles, 1, 1000);
         // If this changes we must reset cycles and reinitialise particles
