@@ -438,10 +438,12 @@ int main(int, char**)
         ImGui::InputInt("Number of Particles", &config.n_particles, 1, 1000);
         // If this changes we must reset cycles and reinitialise particles
         if (config.n_particles != cycles.back().n_particles) {
-            cycles.clear();
-            particles = initialise_particles(config.n_particles, &config);
-            cycle = {particles, 0};
-            cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+            if (config.n_particles > 0) {
+                cycles.clear();
+                particles = initialise_particles(config.n_particles, &config);
+                cycle = {particles, 0};
+                cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+            }
         }
 
         ImGui::SliderFloat("Cognitive Factor", &config.cognitive_factor, 0.0, 1.0);
