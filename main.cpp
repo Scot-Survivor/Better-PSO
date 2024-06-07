@@ -23,6 +23,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <stack>
 
 struct Particle {
     double x;
@@ -85,7 +86,7 @@ StoredCycle create_stored_cycle(Particle* particles, int iterations, int n_parti
     return {new_particles, iterations, n_particles};
 }
 
-void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredCycle> *cycles) {
+void update_particles(StoredCycle* cycle, AppConfig* config, std::stack<StoredCycle> *cycles) {
     Particle* particles = cycle->particles;
     for (int i = 0; i < config->n_particles; i++) {
         double r1 = (double) (rand()) / ((double) (RAND_MAX));
@@ -119,7 +120,7 @@ void update_particles(UpdateCycle* cycle, AppConfig* config, std::vector<StoredC
     }
     cycle->iterations++;
 
-    cycles->push_back(create_stored_cycle(particles, cycle->iterations, config->n_particles));
+    cycles->push(create_stored_cycle(particles, cycle->iterations, config->n_particles));
 }
 
 
@@ -140,7 +141,7 @@ Particle* initialise_particles(int n_particles, AppConfig* config) {
     return particles;
 }
 
-void write_cycles_to_file(const std::vector<StoredCycle>& cycles, const std::string& filename, AppConfig* config) {
+void write_cycles_to_file(std::stack<StoredCycle> *cycles, const std::string& filename, AppConfig* config) {
     FILE* file = fopen(filename.c_str(), "w");
     if (file == nullptr) {
         printf("Error opening file\n");
@@ -162,7 +163,9 @@ void write_cycles_to_file(const std::vector<StoredCycle>& cycles, const std::str
     fprintf(file, "\n\n\n\n");
 
 
-    for (auto &cycle : cycles) {
+    for (int idx = 0; idx < cycles->size(); idx++) {
+        StoredCycle cycle = cycles->top();
+        cycles->pop();
         for (int i = 0; i < cycle.n_particles; i++) {
             fprintf(file, "%f,%f,", cycle.particles[i].x, cycle.particles[i].y);
         }
@@ -174,8 +177,8 @@ void write_cycles_to_file(const std::vector<StoredCycle>& cycles, const std::str
 
 }
 
-std::vector<StoredCycle> read_cycles_from_file(const std::string& filename, AppConfig* config){
-    std::vector<StoredCycle> cycles;
+std::stack<StoredCycle> read_cycles_from_file(const std::string& filename, AppConfig* config){
+    std::stack<StoredCycle> cycles;
     std::fstream file;
     file.open(filename, std::ios::in);
     if (!file.is_open()) {
@@ -238,12 +241,20 @@ std::vector<StoredCycle> read_cycles_from_file(const std::string& filename, AppC
             }
             i++;
         }
-        cycles.push_back({particles, iter, config->n_particles});
+        cycles.push({particles, iter, config->n_particles});
         iter++;
     }
 
     file.close();
     return cycles;
+}
+
+
+void clear_cycles(std::stack<StoredCycle> *cycles) {
+    for (int i = 0; i < cycles->size(); i++) {
+        delete[] cycles->top().particles;
+        cycles->pop();
+    }
 }
 
 
@@ -282,6 +293,7 @@ int main(int, char**)
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -311,11 +323,11 @@ int main(int, char**)
     bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     AppConfig config;
-    std::vector<StoredCycle> cycles;
+    std::stack<StoredCycle> cycles;
 
-    Particle* particles = initialise_particles(config.n_particles, &config);
-    UpdateCycle cycle = {particles, 0};
-    cycles.push_back(create_stored_cycle(particles, cycle.iterations, config.n_particles));
+    UpdateCycle temp = {initialise_particles(config.n_particles, &config),
+                         0};
+    cycles.push(create_stored_cycle(temp.particles, temp.iterations, config.n_particles));
     char filename[1024] = "cycles.csv";
 
     bool do_pso = false;
@@ -349,23 +361,23 @@ int main(int, char**)
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                             ImGuiWindowFlags_NoCollapse |ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse |
-                                                             ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                              ImGuiWindowFlags_NoScrollWithMouse
+                                                             | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
 
 
         ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
 
-        std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " + std::to_string(cycle.iterations);
+        std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " + std::to_string(cycles.top().iterations);
         if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
                                ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
 
             auto* xs = new double[config.n_particles];
             auto* ys = new double[config.n_particles];
             for (int i = 0; i < config.n_particles; i++) {
-                xs[i] = cycle.particles[i].x;
-                ys[i] = cycle.particles[i].y;
+                xs[i] = cycles.top().particles[i].x;
+                ys[i] = cycles.top().particles[i].y;
             }
 
             ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
@@ -393,42 +405,34 @@ int main(int, char**)
         ImGui::SameLine();
 
         if (ImGui::Button("Reset")) {
-            cycles.clear();
-            particles = initialise_particles(config.n_particles, &config);
-            cycle = {particles, 0};
-            cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+            clear_cycles(&cycles);
+            cycles.push(create_stored_cycle(initialise_particles(config.n_particles, &config), 0, config.n_particles));
             config.global_best_x = 0;
             config.global_best_y = 0;
-            config.global_best_fitness = 1e12;
         }
 
         ImGui::SameLine();
         // Backward arrow
         if (ImGui::Button("<")) {
-            if (!cycles.empty() && cycles.size() - 1 >= 1 && cycle.iterations > 0) {
-                cycles.pop_back();
-                StoredCycle c = cycles.back();
-                cycle.particles = c.particles;
-                cycle.iterations = c.iterations;
+            if (!cycles.empty()) {
+                cycles.pop();
             }
         }
         ImGui::SameLine();
         // Forward arrow
         if (ImGui::Button(">")) {
-            update_particles(&cycle, &config, &cycles);
+            update_particles(&cycles.top(), &config, &cycles);
         }
 
         ImGui::InputText("Filename", filename, 1024);
 
         if (ImGui::Button("Save")) {
-            write_cycles_to_file(cycles, filename, &config);
+            write_cycles_to_file(&cycles, filename, &config);
         }
         ImGui::SameLine();
         if (ImGui::Button("Load")) {
             cycles = read_cycles_from_file(filename, &config);
-            StoredCycle c = cycles.back();
-            cycle.particles = c.particles;
-            cycle.iterations = c.iterations;
+            cycles.pop();
         }
 
         ImGui::End();
@@ -437,12 +441,10 @@ int main(int, char**)
 
         ImGui::InputInt("Number of Particles", &config.n_particles, 1, 1000);
         // If this changes we must reset cycles and reinitialise particles
-        if (config.n_particles != cycles.back().n_particles) {
+        if (config.n_particles != cycles.top().n_particles) {
             if (config.n_particles > 0) {
-                cycles.clear();
-                particles = initialise_particles(config.n_particles, &config);
-                cycle = {particles, 0};
-                cycles.push_back(create_stored_cycle(particles, 0, config.n_particles));
+                clear_cycles(&cycles);
+                cycles.push(create_stored_cycle(initialise_particles(config.n_particles, &config), 0, config.n_particles));
             }
         }
 
@@ -460,8 +462,8 @@ int main(int, char**)
 
         if ( do_pso && (
                 ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
-                ImGui::GetFrameCount() == 0) && cycle.iterations < config.max_iterations) {
-            update_particles(&cycle, &config, &cycles);
+                ImGui::GetFrameCount() == 0) && cycles.top().iterations < config.max_iterations) {
+            update_particles(&cycles.top(), &config, &cycles);
         }
 
 
