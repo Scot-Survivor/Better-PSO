@@ -118,9 +118,8 @@ void update_particles(StoredCycle* cycle, AppConfig* config, std::stack<StoredCy
         particles[i].x = new_x;
         particles[i].y = new_y;
     }
-    cycle->iterations++;
 
-    cycles->push(create_stored_cycle(particles, cycle->iterations, config->n_particles));
+    cycles->push(create_stored_cycle(particles, cycle->iterations + 1, config->n_particles));
 }
 
 
@@ -414,7 +413,7 @@ int main(int, char**)
         ImGui::SameLine();
         // Backward arrow
         if (ImGui::Button("<")) {
-            if (!cycles.empty()) {
+            if (cycles.size() > 1) {
                 cycles.pop();
             }
         }
