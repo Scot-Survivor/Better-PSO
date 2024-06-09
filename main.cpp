@@ -160,18 +160,27 @@ void write_cycles_to_file(std::stack<StoredCycle> *cycles, const std::string& fi
     fprintf(file, "goal_y,%f\n", config->goal_y);
     fprintf(file, "\n\n\n\n");
 
+    std::vector<StoredCycle> temp;
 
-    for (int idx = 0; idx < cycles->size(); idx++) {
-        StoredCycle cycle = cycles->top();
+    while (!cycles->empty()) {
+        temp.push_back(cycles->top());
         cycles->pop();
-        for (int i = 0; i < cycle.n_particles; i++) {
-            fprintf(file, "%f,%f,", cycle.particles[i].x, cycle.particles[i].y);
+    }
+
+    for (int i = temp.size() - 1; i >= 0; i--) {
+        for (int j = 0; j < temp[i].n_particles; j++) {
+            fprintf(file, "%f,%f", temp[i].particles[j].x, temp[i].particles[j].y);
+            if (j != temp[i].n_particles - 1) {
+                fprintf(file, ",");
+            }
         }
         fprintf(file, "\n");
     }
 
-
     fclose(file);
+    for (auto i : temp) {
+        cycles->push(i);
+    }
 
 }
 
@@ -249,7 +258,7 @@ std::stack<StoredCycle> read_cycles_from_file(const std::string& filename, AppCo
 
 
 void clear_cycles(std::stack<StoredCycle> *cycles) {
-    for (int i = 0; i < cycles->size(); i++) {
+    while (!cycles->empty()) {
         delete[] cycles->top().particles;
         cycles->pop();
     }
@@ -368,7 +377,8 @@ int main(int, char**)
         ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
 
         std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " +
-                std::to_string(cycles.top().iterations);
+                std::to_string(cycles.top().iterations+1) + "/" +
+                std::to_string(cycles.size()) + "("  + std::to_string(config.max_iterations) + ")";
         if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
                                ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
 
