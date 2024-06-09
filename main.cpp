@@ -420,6 +420,7 @@ int main(int, char**)
             delete[] temp;
             config.global_best_x = 0;
             config.global_best_y = 0;
+            config.global_best_fitness = 1e12;
         }
 
         ImGui::SameLine();
