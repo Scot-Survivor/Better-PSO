@@ -80,14 +80,13 @@ double fitness_function(double x, double y, AppConfig* config) {
 
 StoredCycle create_stored_cycle(Particle* particles, int iterations, int n_particles) {
     auto* new_particles = new Particle[n_particles];
-    for (int i = 0; i < 5; i++) {
-        new_particles[i] = particles[i];
-    }
+    std::copy(particles, particles + n_particles, new_particles);
     return {new_particles, iterations, n_particles};
 }
 
 void update_particles(StoredCycle* cycle, AppConfig* config, std::stack<StoredCycle> *cycles) {
-    Particle* particles = cycle->particles;
+    StoredCycle next_cycle = create_stored_cycle(cycle->particles, cycle->iterations+1, config->n_particles);
+    Particle* particles = next_cycle.particles;
     for (int i = 0; i < config->n_particles; i++) {
         double r1 = (double) (rand()) / ((double) (RAND_MAX));
         double r2 = (double) (rand()) / ((double) (RAND_MAX));
@@ -98,8 +97,8 @@ void update_particles(StoredCycle* cycle, AppConfig* config, std::stack<StoredCy
         double social_component_x = config->social_factor * r2 * (config->global_best_x - particles[i].x);
         double social_component_y = config->social_factor * r2 * (config->global_best_y - particles[i].y);
 
-        double new_x = particles[i].x + config->inertia_weight * cognitive_component_x + social_component_x;
-        double new_y = particles[i].y + config->inertia_weight * cognitive_component_y + social_component_y;
+        double new_x = particles[i].x + config->inertia_weight + cognitive_component_x + social_component_x;
+        double new_y = particles[i].y + config->inertia_weight + cognitive_component_y + social_component_y;
 
 #ifdef DEBUG
         printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
@@ -119,7 +118,7 @@ void update_particles(StoredCycle* cycle, AppConfig* config, std::stack<StoredCy
         particles[i].y = new_y;
     }
 
-    cycles->push(create_stored_cycle(particles, cycle->iterations + 1, config->n_particles));
+    cycles->push( next_cycle);
 }
 
 
@@ -324,9 +323,9 @@ int main(int, char**)
     AppConfig config;
     std::stack<StoredCycle> cycles;
 
-    UpdateCycle temp = {initialise_particles(config.n_particles, &config),
-                         0};
-    cycles.push(create_stored_cycle(temp.particles, temp.iterations, config.n_particles));
+    Particle* temp = initialise_particles(config.n_particles, &config);
+    cycles.push(create_stored_cycle(temp, 0, config.n_particles));
+    delete[] temp;
     char filename[1024] = "cycles.csv";
 
     bool do_pso = false;
@@ -368,7 +367,8 @@ int main(int, char**)
 
         ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
 
-        std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " + std::to_string(cycles.top().iterations);
+        std::string title = "Global Best Fitness: " + std::to_string(config.global_best_fitness) + " Iterations: " +
+                std::to_string(cycles.top().iterations);
         if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
                                ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
 
@@ -405,7 +405,9 @@ int main(int, char**)
 
         if (ImGui::Button("Reset")) {
             clear_cycles(&cycles);
-            cycles.push(create_stored_cycle(initialise_particles(config.n_particles, &config), 0, config.n_particles));
+            Particle* temp = initialise_particles(config.n_particles, &config);
+            cycles.push(create_stored_cycle(temp, 0, config.n_particles));
+            delete[] temp;
             config.global_best_x = 0;
             config.global_best_y = 0;
         }
@@ -431,7 +433,6 @@ int main(int, char**)
         ImGui::SameLine();
         if (ImGui::Button("Load")) {
             cycles = read_cycles_from_file(filename, &config);
-            cycles.pop();
         }
 
         ImGui::End();
@@ -443,7 +444,9 @@ int main(int, char**)
         if (config.n_particles != cycles.top().n_particles) {
             if (config.n_particles > 0) {
                 clear_cycles(&cycles);
-                cycles.push(create_stored_cycle(initialise_particles(config.n_particles, &config), 0, config.n_particles));
+                Particle* temp = initialise_particles(config.n_particles, &config);
+                cycles.push(create_stored_cycle(temp, 0, config.n_particles));
+                delete[] temp;
             }
         }
 
