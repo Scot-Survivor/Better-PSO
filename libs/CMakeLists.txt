@@ -14,9 +14,15 @@ message("Implot Files: ${IMPLOT_SRC_FILES}")
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/libs/implot)
 
 # ImGUI stuff
-file(GLOB IMGUI_STANDARD_SRC_FILES ${CMAKE_SOURCE_DIR}/libs/imgui/*.cpp ${CMAKE_SOURCE_DIR}/libs/imgui/*.h)
+file(GLOB IMGUI_STANDARD_SRC_FILES ${CMAKE_SOURCE_DIR}/include/imconfig.h ${CMAKE_SOURCE_DIR}/libs/imgui/*.cpp ${CMAKE_SOURCE_DIR}/libs/imgui/*.h)
 # Include IMPLOT_SRC_FILES in IMGUI_STANDARD_SRC_FILES
 list(APPEND IMGUI_STANDARD_SRC_FILES ${IMPLOT_SRC_FILES})
+# Remove "imconfig.h" from IMGUI_STANDARD_SRC_FILES
+list(REMOVE_ITEM IMGUI_STANDARD_SRC_FILES ${CMAKE_SOURCE_DIR}/libs/imgui/imconfig.h)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE "include/imconfig.h")
+target_include_directories(${PROJECT_NAME} PRIVATE "include")
+
 message("Imgui Files: ${IMGUI_STANDARD_SRC_FILES}")
 add_library(imgui STATIC
         ${IMGUI_STANDARD_SRC_FILES}
@@ -30,5 +36,6 @@ target_include_directories(imgui PUBLIC
                             ${CMAKE_SOURCE_DIR}/libs/imgui
                             ${CMAKE_SOURCE_DIR}/libs/imgui/backends
                             ${CMAKE_SOURCE_DIR}/libs/SDL/include
+                            ${CMAKE_SOURCE_DIR}/include
         )
 target_link_libraries(${PROJECT_NAME} imgui)

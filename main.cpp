@@ -1,20 +1,11 @@
-// Dear ImGui: standalone example application for SDL2 + OpenGL
-// (SDL is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
+#define IMGUI_USER_CONFIG "../include/imconfig.h"
 
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
-
-// **DO NOT USE THIS CODE IF YOUR CODE/ENGINE IS USING MODERN OPENGL (SHADERS, VBO, VAO, etc.)**
-// **Prefer using the code in the example_sdl2_opengl3/ folder**
-// See imgui_impl_sdl2.cpp for details.
-
+#include "include/imconfig.h"
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl2.h"
 #include "implot.h"
+#include "imgui_internal.h"
 #include <cstdio>
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -482,6 +473,28 @@ int main(int, char**)
                 ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
                 ImGui::GetFrameCount() == 0) && cycles.top().iterations < config.max_iterations) {
             update_particles(&cycles.top(), &config, &cycles);
+        }
+
+        if (ImGui::GetFrameCount() == 1) {
+            ImGuiID parent_node = ImGui::DockBuilderAddNode();
+
+            ImVec2 size_dockspace = ImVec2{0.35, 0.35} * ImGui::GetMainViewport()->Size;
+            ImGui::DockBuilderSetNodeSize(parent_node, size_dockspace);
+
+            // place at bottom right corner
+            ImVec2 pos = ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size - (size_dockspace + ImVec2{0.1, 0.1});
+
+            ImGui::DockBuilderSetNodePos(parent_node, pos);
+
+            ImGuiID nodeA;
+            ImGuiID nodeB;
+            ImGui::DockBuilderSplitNode(parent_node, ImGuiDir_Up, 0.30f,
+                                        &nodeB, &nodeA);
+
+            ImGui::DockBuilderDockWindow("Controls", nodeB);
+            ImGui::DockBuilderDockWindow("Configuration", nodeA);
+
+            ImGui::DockBuilderFinish(parent_node);
         }
 
 
