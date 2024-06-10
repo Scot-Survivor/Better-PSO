@@ -372,9 +372,10 @@ int main(int, char**)
 
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+        ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
         ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                               ImGuiWindowFlags_NoScrollWithMouse
-                                                             | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
+                                                             | ImGuiWindowFlags_NoBackground);
 
 
 
