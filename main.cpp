@@ -256,6 +256,27 @@ void clear_cycles(std::stack<StoredCycle> *cycles) {
 }
 
 
+void forward_button(std::stack<StoredCycle> *cycles, AppConfig* config) {
+    update_particles(&cycles->top(), config, cycles);
+}
+
+void backward_button(std::stack<StoredCycle> *cycles) {
+    if (cycles->size() > 1) {
+        cycles->pop();
+    }
+}
+
+void reset(std::stack<StoredCycle> *cycles, AppConfig* config) {
+    clear_cycles(cycles);
+    Particle* temp = initialise_particles(config->n_particles, config);
+    cycles->push(create_stored_cycle(temp, 0, config->n_particles));
+    delete[] temp;
+    config->global_best_x = 0;
+    config->global_best_y = 0;
+    config->global_best_fitness = 1e12;
+}
+
+
 // Main code
 int main(int, char**)
 {
@@ -349,6 +370,18 @@ int main(int, char**)
                 done = true;
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
                 done = true;
+
+            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RIGHT)
+                forward_button(&cycles, &config);
+
+            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_LEFT)
+                backward_button(&cycles);
+
+            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
+                do_pso = !do_pso;
+
+            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_r)
+                reset(&cycles, &config);
         }
 
         // Start the Dear ImGui frame
@@ -364,9 +397,12 @@ int main(int, char**)
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
+        if (ImGui::GetFrameCount() == 1) {
+            ImGui::SetNextWindowFocus();
+        }
         ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                               ImGuiWindowFlags_NoScrollWithMouse
-                                                             | ImGuiWindowFlags_NoBackground);
+                                                             | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
 
 
 
@@ -410,26 +446,18 @@ int main(int, char**)
         ImGui::SameLine();
 
         if (ImGui::Button("Reset")) {
-            clear_cycles(&cycles);
-            Particle* temp = initialise_particles(config.n_particles, &config);
-            cycles.push(create_stored_cycle(temp, 0, config.n_particles));
-            delete[] temp;
-            config.global_best_x = 0;
-            config.global_best_y = 0;
-            config.global_best_fitness = 1e12;
+            reset(&cycles, &config);
         }
 
         ImGui::SameLine();
         // Backward arrow
         if (ImGui::Button("<")) {
-            if (cycles.size() > 1) {
-                cycles.pop();
-            }
+            backward_button(&cycles);
         }
         ImGui::SameLine();
         // Forward arrow
         if (ImGui::Button(">")) {
-            update_particles(&cycles.top(), &config, &cycles);
+            forward_button(&cycles, &config);
         }
 
         ImGui::InputText("Filename", filename, 1024);
