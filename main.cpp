@@ -87,7 +87,7 @@ int main(int, char**)
 
     // Our state
     bool chosen_optimiser = false;
-    algos::Optimiser optimiser;
+    algos::Optimiser* optimiser = nullptr;
 
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     /*algos::pso::PSOConfig config = algos::pso::PSOConfig();
@@ -114,16 +114,16 @@ int main(int, char**)
                 done = true;
 
             if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RIGHT)
-                optimiser.forward_step();
+                if (optimiser != nullptr) optimiser->forward_step();
 
             if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_LEFT)
-                optimiser.backward_step();
+                if (optimiser != nullptr) optimiser->backward_step();
 
             if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)
                 do_pso = !do_pso;
 
             if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_r)
-                optimiser.reset();
+                if (optimiser != nullptr) optimiser->reset();
         }
 
         // Start the Dear ImGui frame
@@ -141,8 +141,14 @@ int main(int, char**)
         if (!chosen_optimiser) {
             ImGui::Begin("Optimisation Picker", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                                   ImGuiWindowFlags_NoScrollWithMouse
-                                                                 | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
-            ImGui::ShowDemoWindow();
+                                                                  | ImGuiWindowFlags_NoDecoration);
+            if (ImGui::CollapsingHeader("Particle Swarm Optimisation (PSO)")) {
+                ImGui::TextWrapped("%s", "Particle Swarm Optimisation (PSO) is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves problems by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search-space according to simple mathematical formulae over the particle's position and velocity. Each particle's movement is influenced by its local best known position, but is also guided toward the best known positions in the search-space, which are updated as better positions are found by other particles. This is expected to move the swarm toward the best solutions.");
+                if (ImGui::Button("Select PSO")) {
+                    optimiser = new algos::PSO(fitness_function, algos::pso::PSOConfig());
+                    chosen_optimiser = true;
+                }
+            }
             ImGui::End();
         }
         else {
@@ -150,7 +156,7 @@ int main(int, char**)
                                                                   ImGuiWindowFlags_NoScrollWithMouse
                                                                  | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
 
-            optimiser.plot();
+            optimiser->plot();
             ImGui::End();
 
             ImGui::Begin("Controls");
@@ -161,38 +167,38 @@ int main(int, char**)
             ImGui::SameLine();
 
             if (ImGui::Button("Reset")) {
-                optimiser.reset();
+                optimiser->reset();
             }
 
             ImGui::SameLine();
             // Backward arrow
             if (ImGui::Button("<")) {
-                optimiser.backward_step();
+                optimiser->backward_step();
             }
             ImGui::SameLine();
             // Forward arrow
             if (ImGui::Button(">")) {
-                optimiser.forward_step();
+                optimiser->forward_step();
             }
 
             ImGui::InputText("Filename", filename, 1024);
 
             if (ImGui::Button("Save")) {
-                optimiser.save_to_file(filename);
+                optimiser->save_to_file(filename);
             }
             ImGui::SameLine();
             if (ImGui::Button("Load")) {
-                optimiser.load_from_file(filename);
+                optimiser->load_from_file(filename);
             }
 
             ImGui::End();
 
             ImGui::Begin("Configuration");
-            optimiser.display_config_window();
+            optimiser->display_config_window();
             ImGui::End();
 
-            if ( do_pso && optimiser.should_step()) {
-                optimiser.forward_step();
+            if ( do_pso && optimiser->should_step()) {
+                optimiser->forward_step();
                     }
 
             if (ImGui::GetFrameCount() == 1) {
