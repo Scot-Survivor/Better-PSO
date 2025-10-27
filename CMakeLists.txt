@@ -7,7 +7,10 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 add_executable(${PROJECT_NAME} main.cpp
-        include/imconfig.h)
+        include/imconfig.h
+        include/searchers.h
+        include/pso.cpp
+        searches.cpp)
 
 # Add third party libraries.
 add_subdirectory(libs)
