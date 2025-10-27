@@ -11,7 +11,7 @@ jobs:
     - name: Submodule update
       run: git submodule update --init --recursive
     - name: Install dependencies
-      run: sudo apt-get install libgl1-mesa-dev
+      run: sudo apt-get install libgl1-mesa-dev libxext-dev
     - name: Set up CMake
       uses: threeal/cmake-action@v1.3.0
       with:
