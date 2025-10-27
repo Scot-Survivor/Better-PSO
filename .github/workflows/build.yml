@@ -5,14 +5,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: calculate version
-      id: calculate-version
-      uses: bitshifted/git-auto-semver@v1
-      with:
-        main_branch: master
-        create_tag: true
     - name: Use version
-      run: 'echo "Calculated version: ${{ steps.calculate-version.outputs.version-string }}"'
+      run: 'echo "Calculated version: ${{ github.sha }}"'
     - uses: actions/checkout@v2
     - name: Submodule update
       run: git submodule update --init --recursive
@@ -27,7 +21,7 @@ jobs:
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-${{ steps.calculate-version.outputs.version-string }}
+        name: build-${{ github.sha }}
         path: build/Better_PSO
 
   build-win:
@@ -45,5 +39,5 @@ jobs:
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-${{ steps.calculate-version.outputs.version-string }}
+        name: build-${{ github.sha }}
         path: build
