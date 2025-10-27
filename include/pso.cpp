@@ -302,6 +302,7 @@ namespace algos {
 
         void plot() override {
             std::string title = this->get_title();
+            ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
             if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
                                    ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
 
@@ -328,5 +329,10 @@ namespace algos {
                 ImPlot::EndPlot();
                                    };
         };
+
+        bool should_step() {
+            return ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
+                    ImGui::GetFrameCount() == 0;
+        }
     };
 }

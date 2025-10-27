@@ -86,10 +86,12 @@ int main(int, char**)
     //IM_ASSERT(font != nullptr);
 
     // Our state
-    bool show_demo_window = false;
+    bool chosen_optimiser = false;
+    algos::Optimiser optimiser;
+
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    algos::pso::PSOConfig config = algos::pso::PSOConfig();
-    algos::PSO optimiser = algos::PSO(fitness_function, config);
+    /*algos::pso::PSOConfig config = algos::pso::PSOConfig();
+    optimiser = algos::PSO(fitness_function, config); */
     char filename[1024] = "cycles.csv";
 
     bool do_pso = false;
@@ -129,10 +131,6 @@ int main(int, char**)
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
 
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
@@ -140,81 +138,84 @@ int main(int, char**)
         if (ImGui::GetFrameCount() == 1) {
             ImGui::SetNextWindowFocus();
         }
-        ImGui::Begin("Particle Swarm Optimisation", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                              ImGuiWindowFlags_NoScrollWithMouse
-                                                             | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
-
-
-
-        ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
-
-        optimiser.plot();
-        ImGui::End();
-
-        ImGui::Begin("Controls");
-        std::string button_text = do_pso ? "Stop PSO" : "Start PSO";
-        if (ImGui::Button(button_text.c_str())) {
-            do_pso = !do_pso;
+        if (!chosen_optimiser) {
+            ImGui::Begin("Optimisation Picker", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                                  ImGuiWindowFlags_NoScrollWithMouse
+                                                                 | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+            ImGui::ShowDemoWindow();
+            ImGui::End();
         }
-        ImGui::SameLine();
+        else {
+            ImGui::Begin("Optimisation Viewer", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                                  ImGuiWindowFlags_NoScrollWithMouse
+                                                                 | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
 
-        if (ImGui::Button("Reset")) {
-            optimiser.reset();
-        }
+            optimiser.plot();
+            ImGui::End();
 
-        ImGui::SameLine();
-        // Backward arrow
-        if (ImGui::Button("<")) {
-            optimiser.backward_step();
-        }
-        ImGui::SameLine();
-        // Forward arrow
-        if (ImGui::Button(">")) {
-            optimiser.forward_step();
-        }
+            ImGui::Begin("Controls");
+            std::string button_text = do_pso ? "Stop PSO" : "Start PSO";
+            if (ImGui::Button(button_text.c_str())) {
+                do_pso = !do_pso;
+            }
+            ImGui::SameLine();
 
-        ImGui::InputText("Filename", filename, 1024);
+            if (ImGui::Button("Reset")) {
+                optimiser.reset();
+            }
 
-        if (ImGui::Button("Save")) {
-            optimiser.save_to_file(filename);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Load")) {
-            optimiser.load_from_file(filename);
-        }
+            ImGui::SameLine();
+            // Backward arrow
+            if (ImGui::Button("<")) {
+                optimiser.backward_step();
+            }
+            ImGui::SameLine();
+            // Forward arrow
+            if (ImGui::Button(">")) {
+                optimiser.forward_step();
+            }
 
-        ImGui::End();
+            ImGui::InputText("Filename", filename, 1024);
 
-        ImGui::Begin("Configuration");
-        optimiser.display_config_window();
-        ImGui::End();
+            if (ImGui::Button("Save")) {
+                optimiser.save_to_file(filename);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load")) {
+                optimiser.load_from_file(filename);
+            }
 
-        if ( do_pso && (
-                ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
-                ImGui::GetFrameCount() == 0)) {
-            optimiser.forward_step();
-        }
+            ImGui::End();
 
-        if (ImGui::GetFrameCount() == 1) {
-            ImGuiID parent_node = ImGui::DockBuilderAddNode();
+            ImGui::Begin("Configuration");
+            optimiser.display_config_window();
+            ImGui::End();
 
-            ImVec2 size_dockspace = ImVec2{0.35, 0.35} * ImGui::GetMainViewport()->Size;
-            ImGui::DockBuilderSetNodeSize(parent_node, size_dockspace);
+            if ( do_pso && optimiser.should_step()) {
+                optimiser.forward_step();
+                    }
 
-            // place at bottom right corner
-            ImVec2 pos = ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size - (size_dockspace + ImVec2{0.1, 0.1});
+            if (ImGui::GetFrameCount() == 1) {
+                ImGuiID parent_node = ImGui::DockBuilderAddNode();
 
-            ImGui::DockBuilderSetNodePos(parent_node, pos);
+                ImVec2 size_dockspace = ImVec2{0.35, 0.35} * ImGui::GetMainViewport()->Size;
+                ImGui::DockBuilderSetNodeSize(parent_node, size_dockspace);
 
-            ImGuiID nodeA;
-            ImGuiID nodeB;
-            ImGui::DockBuilderSplitNode(parent_node, ImGuiDir_Up, 0.30f,
-                                        &nodeB, &nodeA);
+                // place at bottom right corner
+                ImVec2 pos = ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size - (size_dockspace + ImVec2{0.1, 0.1});
 
-            ImGui::DockBuilderDockWindow("Controls", nodeB);
-            ImGui::DockBuilderDockWindow("Configuration", nodeA);
+                ImGui::DockBuilderSetNodePos(parent_node, pos);
 
-            ImGui::DockBuilderFinish(parent_node);
+                ImGuiID nodeA;
+                ImGuiID nodeB;
+                ImGui::DockBuilderSplitNode(parent_node, ImGuiDir_Up, 0.30f,
+                                            &nodeB, &nodeA);
+
+                ImGui::DockBuilderDockWindow("Controls", nodeB);
+                ImGui::DockBuilderDockWindow("Configuration", nodeA);
+
+                ImGui::DockBuilderFinish(parent_node);
+            }
         }
 
 

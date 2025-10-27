@@ -40,6 +40,7 @@ namespace algos {
         virtual AppConfig get_config();
 
         virtual void plot();
+        virtual bool should_step();
     };
 
     typedef std::function<double(double, double, AppConfig*)> FitnessFunction;
