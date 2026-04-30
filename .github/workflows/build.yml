@@ -26,7 +26,7 @@ jobs:
           path: build/Better_PSO
 
   build-win:
-    runs-on: windows-2024
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Submodule update
