@@ -114,6 +114,11 @@ jobs:
           name: web-build
           path: release-assets/web
 
+      - name: Package Windows binary
+        run: |
+          cd release-assets/windows
+          mv build-win/Debug/Better_PSO.exe ../Better_PSO.exe
+
       - name: Package Linux binary
         run: |
           cd release-assets/linux
