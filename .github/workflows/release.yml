@@ -114,11 +114,6 @@ jobs:
           name: web-build
           path: release-assets/web
 
-      - name: Package Windows binary
-        run: |
-          cd release-assets/windows
-          zip -r ../Better_PSO-windows.zip .
-
       - name: Package Linux binary
         run: |
           cd release-assets/linux
@@ -134,7 +129,7 @@ jobs:
         with:
           files: |
             release-assets/Better_PSO-linux.zip
-            release-assets/Better_PSO-windows.zip
+            release-assets/Better_PSO.exe
             release-assets/Better_PSO-web.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
