@@ -28,7 +28,9 @@ endif()
 if(EMSCRIPTEN)
     target_link_options(${PROJECT_NAME} PRIVATE
             "-sUSE_SDL=2"
-            "-sALLOW_MEMORY_GROWTH=1")
+            "-sALLOW_MEMORY_GROWTH=1"
+            "-sMAX_WEBGL_VERSION=2"
+            "-sMIN_WEBGL_VERSION=2")
 endif()
 
 # CPack Configuration

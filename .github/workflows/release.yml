@@ -1,0 +1,135 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submodule update
+        run: git submodule update --init --recursive
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxext-dev
+
+      - name: Set up CMake
+        uses: threeal/cmake-action@v1.3.0
+        with:
+          cmake-version: '3.27.0'
+
+      - name: Build
+        run: cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release && cmake --build build-linux -j 4
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: build-linux/Better_PSO
+
+  build-windows:
+    runs-on: windows-2024
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submodule update
+        run: git submodule update --init --recursive
+
+      - name: Set up CMake
+        uses: threeal/cmake-action@v1.3.0
+        with:
+          cmake-version: '3.27.0'
+
+      - name: Build
+        run: cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release && cmake --build build-win --config Release -j 4
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: build-win
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submodule update
+        run: git submodule update --init --recursive
+
+      - name: Install emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      - name: Configure web build
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build web
+        run: cmake --build build-web -j 4
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: |
+            build-web/Better_PSO.html
+            build-web/Better_PSO.js
+            build-web/Better_PSO.wasm
+
+  publish-release:
+    needs: [build-linux, build-windows, build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: release-assets/linux
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: release-assets/windows
+
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: release-assets/web
+
+      - name: Package Windows binary
+        run: |
+          cd release-assets/windows
+          zip -r ../Better_PSO-windows.zip .
+
+      - name: Package Linux binary
+        run: |
+          cd release-assets/linux
+          zip -r ../Better_PSO-linux.zip Better_PSO
+
+      - name: Package Web build
+        run: |
+          cd release-assets/web
+          zip -r ../Better_PSO-web.zip Better_PSO.html Better_PSO.js Better_PSO.wasm
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/Better_PSO-linux.zip
+            release-assets/Better_PSO-windows.zip
+            release-assets/Better_PSO-web.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
