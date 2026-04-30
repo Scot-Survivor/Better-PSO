@@ -61,7 +61,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-binary
-          path: build-win
+          path: | 
+            build-win/Debug/Better_PSO.exe
 
   build-web:
     runs-on: ubuntu-latest
