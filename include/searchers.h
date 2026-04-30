@@ -34,10 +34,13 @@ namespace algos {
         virtual void save_to_file(const std::string& filename);
         virtual void load_from_file(const std::string& filename);
         virtual void display_config_window();  // GUI for configuration
+        virtual void randomize_goal() {}
+        virtual void randomize_bounds() {}
+        virtual void plot_history() {}
 
         virtual std::string get_title();
 
-        virtual AppConfig get_config();
+        virtual const AppConfig& get_config();
 
         virtual void plot();
         virtual bool should_step();

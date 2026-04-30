@@ -8,6 +8,7 @@
 #include "tinyexpr.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <string>
 
@@ -21,6 +22,33 @@
 #endif
 
 #include "pso.cpp"
+
+static void show_tooltip(const char* text)
+{
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+struct EquationPreset {
+    const char* label;
+    const char* expression;
+};
+
+static constexpr EquationPreset kEquationPresets[] = {
+    {"Euclidean Distance", "sqrt((x-goal_x)^2 + (y-goal_y)^2)"},
+    {"Quadratic Bowl", "(x-goal_x)^2 + (y-goal_y)^2"},
+    {"Sine Ridge", "sin(x) + cos(y)"},
+    {"Ripple Field", "sin(sqrt((x-goal_x)^2 + (y-goal_y)^2))"},
+    {"Absolute Distance", "abs(x-goal_x) + abs(y-goal_y)"}
+};
+
+static constexpr int kEquationPresetCount = (int)(sizeof(kEquationPresets) / sizeof(kEquationPresets[0]));
 
 struct ExpressionFitness {
     std::string expr = "sqrt((x-goal_x)^2 + (y-goal_y)^2)";
@@ -74,11 +102,20 @@ struct AppState {
     char filename[1024] = "cycles.csv";
     bool do_pso = false;
     bool done = false;
+    bool show_tools_window = false;
 
     ExpressionFitness expression_fitness;
     char equation[1024] = "sqrt((x-goal_x)^2 + (y-goal_y)^2)";
     bool equation_valid = false;
 };
+
+static void apply_equation(AppState& state, const char* expression)
+{
+    std::string expression_text = expression ? expression : "";
+    std::snprintf(state.equation, sizeof(state.equation), "%s", expression_text.c_str());
+    state.expression_fitness.expr = expression_text;
+    state.equation_valid = state.expression_fitness.compile();
+}
 
 static void handle_events(AppState& state)
 {
@@ -128,12 +165,34 @@ static void draw_frame(AppState& state)
         ImGui::TextWrapped("The default expression is just Euclidean Distance of current particle & the goal");
         ImGui::TextWrapped("Currently only 2D viewport is supported.");
         ImGui::TextWrapped("You can use these variables:\nx - current X position\ny - current Y position\ngoal_x - target X position\ngoal_y - target Y position");
+
+        const char* preset_preview = "Custom";
+        for (int i = 0; i < kEquationPresetCount; ++i) {
+            if (std::string(state.equation) == kEquationPresets[i].expression) {
+                preset_preview = kEquationPresets[i].label;
+                break;
+            }
+        }
+        if (ImGui::BeginCombo("Equation Preset", preset_preview)) {
+            if (ImGui::Selectable("Custom", std::string(preset_preview) == "Custom")) {
+            }
+            for (int i = 0; i < kEquationPresetCount; ++i) {
+                bool selected = std::string(state.equation) == kEquationPresets[i].expression;
+                if (ImGui::Selectable(kEquationPresets[i].label, selected)) {
+                    apply_equation(state, kEquationPresets[i].expression);
+                }
+            }
+            ImGui::EndCombo();
+        }
+        show_tooltip("Pick a ready-made equation, or leave Custom selected and type your own.");
+
         ImGui::InputText("Equation", state.equation, sizeof(state.equation));
+        show_tooltip("Type a tinyexpr equation using x, y, goal_x, and goal_y.\nExample: sqrt((x-goal_x)^2 + (y-goal_y)^2)");
 
         if (ImGui::Button("Apply Equation")) {
-            state.expression_fitness.expr = state.equation;
-            state.equation_valid = state.expression_fitness.compile();
+            apply_equation(state, std::string(state.equation).c_str());
         }
+        show_tooltip("Compile the typed equation now. If parsing fails, the optimiser stays unavailable until the expression is fixed.");
         if (!state.expression_fitness.compiled && state.expression_fitness.last_error >= 0) {
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Parse error near character %d", state.expression_fitness.last_error);
         }
@@ -141,8 +200,10 @@ static void draw_frame(AppState& state)
         {
             ImGui::TextWrapped("Choose your optimiser by expanding the headers below");
             if (ImGui::CollapsingHeader("Particle Swarm Optimisation (PSO)")) {
+                show_tooltip("PSO is the available optimiser in this build. Expand this section to read about it and select it after the equation has been validated.");
                 ImGui::TextWrapped("%s", "Particle Swarm Optimisation (PSO) is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves problems by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search-space according to simple mathematical formulae over the particle's position and velocity. Each particle's movement is influenced by its local best known position, but is also guided toward the best known positions in the search-space, which are updated as better positions are found by other particles. This is expected to move the swarm toward the best solutions.");
                 if (ImGui::Button("Select PSO") && state.equation_valid) {
+                    show_tooltip("Create the PSO optimiser using the validated custom equation.");
 
                     auto fitness = [&state](double x, double y, algos::AppConfig* config) {
                         return state.expression_fitness(x, y, config);
@@ -170,35 +231,81 @@ static void draw_frame(AppState& state)
 
         ImGui::Begin("Controls");
         std::string button_text = state.do_pso ? "Stop PSO" : "Start PSO";
+        if (state.do_pso) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.22f, 0.22f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.30f, 0.30f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.16f, 0.16f, 1.00f));
+        }
+        else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.70f, 0.30f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.82f, 0.38f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.60f, 0.24f, 1.00f));
+        }
         if (ImGui::Button(button_text.c_str())) {
             state.do_pso = !state.do_pso;
         }
+        ImGui::PopStyleColor(3);
+        show_tooltip("Toggle automatic stepping. Shortcut: Space.");
         ImGui::SameLine();
 
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.48f, 0.12f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.92f, 0.58f, 0.18f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.40f, 0.10f, 1.00f));
         if (ImGui::Button("Reset")) {
             state.optimiser->reset();
         }
+        ImGui::PopStyleColor(3);
+        show_tooltip("Reset the optimiser back to its initial state. Shortcut: R.");
 
         ImGui::SameLine();
         if (ImGui::Button("<")) {
             state.optimiser->backward_step();
         }
+        show_tooltip("Step one iteration backward. Shortcut: Left Arrow.");
         ImGui::SameLine();
         if (ImGui::Button(">")) {
             state.optimiser->forward_step();
         }
+        show_tooltip("Step one iteration forward. Shortcut: Right Arrow.");
 
         ImGui::InputText("Filename", state.filename, 1024);
+        show_tooltip("File path used for saving and loading optimiser state, such as cycles.csv.");
 
         if (ImGui::Button("Save")) {
             state.optimiser->save_to_file(state.filename);
         }
+        show_tooltip("Save the current optimiser state to the filename above.");
         ImGui::SameLine();
         if (ImGui::Button("Load")) {
             state.optimiser->load_from_file(state.filename);
         }
+        show_tooltip("Load optimiser state from the filename above.");
+
+        ImGui::SameLine();
+        if (ImGui::Button(state.show_tools_window ? "Hide Tools" : "Show Tools")) {
+            state.show_tools_window = !state.show_tools_window;
+        }
+        show_tooltip("Open a helper window with randomize actions and a fitness history graph.");
 
         ImGui::End();
+
+        if (state.show_tools_window && state.optimiser != nullptr) {
+            ImGui::Begin("PSO Tools", &state.show_tools_window, ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::TextWrapped("Use these tools to explore the search space and inspect convergence.");
+            if (ImGui::Button("Randomize Goal")) {
+                state.optimiser->randomize_goal();
+            }
+            show_tooltip("Move the target to a new random position within the current bounds, then restart the swarm.");
+            ImGui::SameLine();
+            if (ImGui::Button("Randomize Bounds")) {
+                state.optimiser->randomize_bounds();
+            }
+            show_tooltip("Pick a new random search area, move the goal inside it, and restart the swarm.");
+
+            ImGui::Separator();
+            state.optimiser->plot_history();
+            ImGui::End();
+        }
 
         ImGui::Begin("Configuration");
         state.optimiser->display_config_window();
@@ -258,6 +365,8 @@ static void run_frame(AppState& state)
 
 static bool init_app(AppState& state)
 {
+    std::srand((unsigned)SDL_GetTicks());
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
     {
         printf("Error: %s\n", SDL_GetError());

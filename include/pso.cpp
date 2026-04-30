@@ -2,6 +2,9 @@
 // Created by jkshi on 27/10/2025.
 //
 #include <stack>
+#include <cstdlib>
+#include <vector>
+#include <algorithm>
 #include <utility>
 #include <fstream>
 #include <sstream>
@@ -46,18 +49,22 @@ namespace algos {
         pso::PSOConfig config;
         std::stack<pso::StoredCycle> cycles;
 
-        pso::Particle *initialise_particles(int n_particles, pso::PSOConfig *config) {
+        double random_between(double min_value, double max_value) {
+            return min_value + ((double) std::rand() / (double) RAND_MAX) * (max_value - min_value);
+        }
+
+        pso::Particle *initialise_particles(int n_particles, pso::PSOConfig *settings) {
             auto* particles = new pso::Particle[n_particles];
             for (int i = 0; i < n_particles; i++) {
-                particles[i].x = config->min_x + (double) (rand()) / ((double) (RAND_MAX / (config->max_x - config->min_x)));
-                particles[i].y = config->min_y + (double) (rand()) / ((double) (RAND_MAX / (config->max_y - config->min_y)));
+                particles[i].x = settings->min_x + (double) (rand()) / ((double) (RAND_MAX / (settings->max_x - settings->min_x)));
+                particles[i].y = settings->min_y + (double) (rand()) / ((double) (RAND_MAX / (settings->max_y - settings->min_y)));
                 particles[i].best_x = particles[i].x;
                 particles[i].best_y = particles[i].y;
-                particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y, config);
-                if (particles[i].best_fitness < config->global_best_fitness) {
-                    config->global_best_x = particles[i].best_x;
-                    config->global_best_y = particles[i].best_y;
-                    config->global_best_fitness = particles[i].best_fitness;
+                particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y, settings);
+                if (particles[i].best_fitness < settings->global_best_fitness) {
+                    settings->global_best_x = particles[i].best_x;
+                    settings->global_best_y = particles[i].best_y;
+                    settings->global_best_fitness = particles[i].best_fitness;
                 }
             }
             return particles;
@@ -146,6 +153,27 @@ namespace algos {
             config.global_best_y = 0;
             config.global_best_fitness = 1e12;
         };
+
+        void randomize_goal() override {
+            config.goal_x = random_between(config.min_x, config.max_x);
+            config.goal_y = random_between(config.min_y, config.max_y);
+            reset();
+        }
+
+        void randomize_bounds() override {
+            int center_x = (int)random_between(-64, 64);
+            int center_y = (int)random_between(-64, 64);
+            int half_width = (int)random_between(16, 64);
+            int half_height = (int)random_between(16, 64);
+
+            config.min_x = center_x - half_width;
+            config.max_x = center_x + half_width;
+            config.min_y = center_y - half_height;
+            config.max_y = center_y + half_height;
+            config.goal_x = random_between(config.min_x, config.max_x);
+            config.goal_y = random_between(config.min_y, config.max_y);
+            reset();
+        }
 
         void save_to_file(const std::string &filename) override {
             FILE* file = fopen(filename.c_str(), "w");
@@ -290,7 +318,7 @@ namespace algos {
             ImGui::InputInt("Max Iterations", &config.max_iterations, 1, 10000);
         };
 
-        AppConfig get_config() override {
+        const AppConfig& get_config() override {
             return config;
         };
 
@@ -299,6 +327,37 @@ namespace algos {
                 std::to_string(cycles.top().iterations+1) + "/" +
                 std::to_string(cycles.size()) + "("  + std::to_string(config.max_iterations) + ")";
         };
+
+        void plot_history() override {
+            std::vector<pso::StoredCycle> ordered_cycles;
+            auto temp = cycles;
+            while (!temp.empty()) {
+                ordered_cycles.push_back(temp.top());
+                temp.pop();
+            }
+            std::reverse(ordered_cycles.begin(), ordered_cycles.end());
+
+            std::vector<double> iterations;
+            std::vector<double> best_fitness;
+            iterations.reserve(ordered_cycles.size());
+            best_fitness.reserve(ordered_cycles.size());
+
+            for (size_t i = 0; i < ordered_cycles.size(); ++i) {
+                double best = ordered_cycles[i].particles[0].best_fitness;
+                for (int j = 1; j < ordered_cycles[i].n_particles; ++j) {
+                    best = std::min(best, ordered_cycles[i].particles[j].best_fitness);
+                }
+                iterations.push_back((double)i);
+                best_fitness.push_back(best);
+            }
+
+            if (ImPlot::BeginPlot("Fitness History", ImVec2(-1, 220))) {
+                if (!iterations.empty()) {
+                    ImPlot::PlotLine("Best Fitness", iterations.data(), best_fitness.data(), (int)iterations.size());
+                }
+                ImPlot::EndPlot();
+            }
+        }
 
         void plot() override {
             std::string title = this->get_title();
@@ -315,11 +374,28 @@ namespace algos {
 
                 ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
 
-                ys[0] = config.goal_y;
+                double center_x = 0.0;
+                double center_y = 0.0;
+                for (int i = 0; i < config.n_particles; ++i) {
+                    center_x += cycles.top().particles[i].x;
+                    center_y += cycles.top().particles[i].y;
+                }
+                center_x /= config.n_particles;
+                center_y /= config.n_particles;
+                double center_xs[1] = {center_x};
+                double center_ys[1] = {center_y};
+                ImPlot::PushStyleColor(ImPlotCol_MarkerFill, ImVec4(0.20f, 0.50f, 1.00f, 1.00f));
+                ImPlot::PushStyleColor(ImPlotCol_MarkerOutline, ImVec4(0.20f, 0.50f, 1.00f, 1.00f));
+                ImPlot::PlotScatter("Swarm Center", center_xs, center_ys, 1);
+                ImPlot::PopStyleColor(2);
+
                 xs[0] = config.goal_x;
-                ImPlot::PushStyleColor(ImPlotCol_MarkerOutline, ImVec4(1, 0, 0, 1));
+                ys[0] = config.goal_y;
+                ImVec4 gold = ImVec4(1.0f, 0.84f, 0.0f, 1.0f);
+                ImPlot::PushStyleColor(ImPlotCol_MarkerFill, gold);
+                ImPlot::PushStyleColor(ImPlotCol_MarkerOutline, gold);
                 ImPlot::PlotScatter("Goal", xs, ys, 1);
-                ImPlot::PopStyleColor();
+                ImPlot::PopStyleColor(2);
 
                 if (ImGui::GetIO().MouseClicked[1]) {
                     config.goal_x = ImPlot::GetPlotMousePos().x;
@@ -330,7 +406,7 @@ namespace algos {
                                    };
         };
 
-        bool should_step() {
+        bool should_step() override {
             return ImGui::GetFrameCount() % (int)(ImGui::GetIO().Framerate * config.seconds_per_iteration) == 0 ||
                     ImGui::GetFrameCount() == 0;
         }

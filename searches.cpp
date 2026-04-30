@@ -14,7 +14,7 @@ namespace algos {
     void Optimiser::load_from_file(const std::string&) {}
     void Optimiser::display_config_window() {}
     std::string Optimiser::get_title() { return std::string(); }
-    AppConfig Optimiser::get_config() { return AppConfig(); }
+    const AppConfig& Optimiser::get_config() { static AppConfig config; return config; }
     void Optimiser::plot() {};
     bool Optimiser::should_step() {return false;};
 
