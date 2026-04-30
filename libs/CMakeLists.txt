@@ -15,6 +15,13 @@ file(GLOB IMGUI_STANDARD_SRC_FILES ${CMAKE_SOURCE_DIR}/libs/imgui/*.cpp ${CMAKE_
 list(APPEND IMGUI_STANDARD_SRC_FILES ${IMPLOT_SRC_FILES})
 list(REMOVE_ITEM IMGUI_STANDARD_SRC_FILES ${CMAKE_SOURCE_DIR}/libs/imgui/imconfig.h)
 
+add_library(tinyexpr STATIC
+            ${CMAKE_SOURCE_DIR}/libs/tinyexpr/tinyexpr.h
+            ${CMAKE_SOURCE_DIR}/libs/tinyexpr/tinyexpr.c)
+
+target_include_directories(tinyexpr PUBLIC
+                           ${CMAKE_SOURCE_DIR}/libs/tinyexpr)
+
 add_library(imgui STATIC
         ${IMGUI_STANDARD_SRC_FILES}
         ${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdl2.cpp
@@ -34,4 +41,4 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(${PROJECT_NAME} SDL2::SDL2main SDL2::SDL2-static)
 endif()
 
-target_link_libraries(${PROJECT_NAME} imgui)
+target_link_libraries(${PROJECT_NAME} imgui tinyexpr)

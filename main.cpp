@@ -5,6 +5,7 @@
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
 #include "imgui_internal.h"
+#include "tinyexpr.h"
 
 #include <cmath>
 #include <cstdio>
@@ -21,13 +22,48 @@
 
 #include "pso.cpp"
 
-/*
- * Fitness function, the lower the better
- * hence why we use the euclidean distance
- */
-double fitness_function(double x, double y, algos::AppConfig* config) {
-    return std::sqrt(std::pow(x - config->goal_x, 2) + std::pow(y - config->goal_y, 2));
-}
+struct ExpressionFitness {
+    std::string expr = "sqrt((x-goal_x)^2 + (y-goal_y)^2)";
+    te_expr* compiled = nullptr;
+    double x = 0.0;
+    double y = 0.0;
+    double goal_x = 0.0;
+    double goal_y = 0.0;
+    int last_error = -1;
+
+    bool compile() {
+        destroy();
+
+        te_variable vars[] = {
+            {"x", &x},
+            {"y", &y},
+            {"goal_x", &goal_x},
+            {"goal_y", &goal_y}
+        };
+
+        int err = -1;
+        compiled = te_compile(expr.c_str(), vars, 4, &err);
+        last_error = err;
+        return compiled != nullptr;
+    }
+
+    double operator()(double px, double py, algos::AppConfig* config) {
+        x = px;
+        y = py;
+        goal_x = config->goal_x;
+        goal_y = config->goal_y;
+        return compiled ? te_eval(compiled) : 1e12;
+    }
+
+    void destroy() {
+        if (compiled) {
+            te_free(compiled);
+            compiled = nullptr;
+        }
+    }
+
+    ~ExpressionFitness() { destroy(); }
+};
 
 struct AppState {
     SDL_Window* window = nullptr;
@@ -38,6 +74,10 @@ struct AppState {
     char filename[1024] = "cycles.csv";
     bool do_pso = false;
     bool done = false;
+
+    ExpressionFitness expression_fitness;
+    char equation[1024] = "sqrt((x-goal_x)^2 + (y-goal_y)^2)";
+    bool equation_valid = false;
 };
 
 static void handle_events(AppState& state)
@@ -84,11 +124,33 @@ static void draw_frame(AppState& state)
         ImGui::Begin("Optimisation Picker", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                      ImGuiWindowFlags_NoScrollWithMouse |
                                                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoCollapse);
-        if (ImGui::CollapsingHeader("Particle Swarm Optimisation (PSO)", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextWrapped("%s", "Particle Swarm Optimisation (PSO) is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves problems by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search-space according to simple mathematical formulae over the particle's position and velocity. Each particle's movement is influenced by its local best known position, but is also guided toward the best known positions in the search-space, which are updated as better positions are found by other particles. This is expected to move the swarm toward the best solutions.");
-            if (ImGui::Button("Select PSO")) {
-                state.optimiser = new algos::PSO(fitness_function, algos::pso::PSOConfig());
-                state.chosen_optimiser = true;
+        ImGui::TextWrapped("Enter a math expression that defines the fitness function for the optimiser.\nThe goal is to minimise the result, so lower values are considered better.");
+        ImGui::TextWrapped("The default expression is just Euclidean Distance of current particle & the goal");
+        ImGui::TextWrapped("Currently only 2D viewport is supported.");
+        ImGui::TextWrapped("You can use these variables:\nx - current X position\ny - current Y position\ngoal_x - target X position\ngoal_y - target Y position");
+        ImGui::InputText("Equation", state.equation, sizeof(state.equation));
+
+        if (ImGui::Button("Apply Equation")) {
+            state.expression_fitness.expr = state.equation;
+            state.equation_valid = state.expression_fitness.compile();
+        }
+        if (!state.expression_fitness.compiled && state.expression_fitness.last_error >= 0) {
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Parse error near character %d", state.expression_fitness.last_error);
+        }
+        if (state.equation_valid)
+        {
+            ImGui::TextWrapped("Choose your optimiser by expanding the headers below");
+            if (ImGui::CollapsingHeader("Particle Swarm Optimisation (PSO)")) {
+                ImGui::TextWrapped("%s", "Particle Swarm Optimisation (PSO) is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves problems by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search-space according to simple mathematical formulae over the particle's position and velocity. Each particle's movement is influenced by its local best known position, but is also guided toward the best known positions in the search-space, which are updated as better positions are found by other particles. This is expected to move the swarm toward the best solutions.");
+                if (ImGui::Button("Select PSO") && state.equation_valid) {
+
+                    auto fitness = [&state](double x, double y, algos::AppConfig* config) {
+                        return state.expression_fitness(x, y, config);
+                    };
+
+                    state.optimiser = new algos::PSO(fitness, algos::pso::PSOConfig());
+                    state.chosen_optimiser = true;
+                }
             }
         }
         ImGui::End();
