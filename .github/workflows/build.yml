@@ -1,43 +1,72 @@
 name: CMake Build
 run-name: CMake Build
 on: [push, pull_request]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Use version
-      run: 'echo "Calculated version: ${{ github.sha }}"'
-    - uses: actions/checkout@v2
-    - name: Submodule update
-      run: git submodule update --init --recursive
-    - name: Install dependencies
-      run: sudo apt-get install libgl1-mesa-dev libxext-dev
-    - name: Set up CMake
-      uses: threeal/cmake-action@v1.3.0
-      with:
-        cmake-version: '3.17.0'
-    - name: Build
-      run: cmake -B build && cmake --build build --config Debug -j 4
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-${{ github.sha }}
-        path: build/Better_PSO
+      - name: Use version
+        run: 'echo "Calculated version: ${{ github.sha }}"'
+      - uses: actions/checkout@v4
+      - name: Submodule update
+        run: git submodule update --init --recursive
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxext-dev
+      - name: Set up CMake
+        uses: threeal/cmake-action@v1.3.0
+        with:
+          cmake-version: '3.27.0'
+      - name: Build
+        run: cmake -B build && cmake --build build --config Debug -j 4
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}-linux
+          path: build/Better_PSO
 
   build-win:
     runs-on: windows-2024
     steps:
-    - uses: actions/checkout@v2
-    - name: Submodule update
-      run: git submodule update --init --recursive
-    - name: Set up CMake
-      uses: threeal/cmake-action@v1.3.0
-      with:
-        cmake-version: '3.17.0'
-    - name: Build
-      run: cmake -B build && cmake --build build --config Debug -j 4
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-${{ github.sha }}
-        path: build
+      - uses: actions/checkout@v4
+      - name: Submodule update
+        run: git submodule update --init --recursive
+      - name: Set up CMake
+        uses: threeal/cmake-action@v1.3.0
+        with:
+          cmake-version: '3.27.0'
+      - name: Build
+        run: cmake -B build && cmake --build build --config Debug -j 4
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}-windows
+          path: build
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submodule update
+        run: git submodule update --init --recursive
+
+      - name: Install emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+
+      - name: Configure web build
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build web
+        run: cmake --build build-web -j 4
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}-web
+          path: |
+            build-web/Better_PSO.html
+            build-web/Better_PSO.js
+            build-web/Better_PSO.wasm
