@@ -100,7 +100,8 @@ static void draw_frame(AppState& state)
 
         ImGui::Begin("Optimisation Viewer", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                      ImGuiWindowFlags_NoScrollWithMouse |
-                                                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
+                                                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration
+                                                     | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
         state.optimiser->plot();
         ImGui::End();
@@ -243,7 +244,7 @@ static bool init_app(AppState& state)
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 #ifndef __EMSCRIPTEN__
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     io.ConfigViewportsNoAutoMerge = true;
