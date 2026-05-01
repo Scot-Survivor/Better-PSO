@@ -4,9 +4,6 @@
 [submodule "libs/imgui"]
 	path = libs/imgui
 	url = https://github.com/ocornut/imgui
-[submodule "libs/glew"]
-	path = libs/glew
-	url = https://github.com/Perlmint/glew-cmake
 [submodule "libs/implot"]
 	path = libs/implot
 	url = https://github.com/epezent/implot
