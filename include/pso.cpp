@@ -8,6 +8,11 @@
 #include <utility>
 #include <fstream>
 #include <sstream>
+#include <random>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include "imgui.h"
 #include "implot.h"
@@ -18,6 +23,8 @@ namespace algos {
         struct Particle {
             double x;
             double y;
+            double vx;
+            double vy;
             double best_x;
             double best_y;
             double best_fitness;
@@ -29,7 +36,7 @@ namespace algos {
             float social_factor = 0.8;
             float inertia_weight = 0.5;
             float seconds_per_iteration = 1;
-
+            int max_history = 100;
         };
 
         struct UpdateCycle {
@@ -48,16 +55,20 @@ namespace algos {
         FitnessFunction fitness_function;
         pso::PSOConfig config;
         std::stack<pso::StoredCycle> cycles;
+        std::mt19937 rng;  // Fast random number generator
+        std::uniform_real_distribution<double> uniform_dist;
 
         double random_between(double min_value, double max_value) {
-            return min_value + ((double) std::rand() / (double) RAND_MAX) * (max_value - min_value);
+            return min_value + uniform_dist(rng) * (max_value - min_value);
         }
 
         pso::Particle *initialise_particles(int n_particles, pso::PSOConfig *settings) {
             auto* particles = new pso::Particle[n_particles];
             for (int i = 0; i < n_particles; i++) {
-                particles[i].x = settings->min_x + (double) (rand()) / ((double) (RAND_MAX / (settings->max_x - settings->min_x)));
-                particles[i].y = settings->min_y + (double) (rand()) / ((double) (RAND_MAX / (settings->max_y - settings->min_y)));
+                particles[i].x = settings->min_x + uniform_dist(rng) * (settings->max_x - settings->min_x);
+                particles[i].y = settings->min_y + uniform_dist(rng) * (settings->max_y - settings->min_y);
+                particles[i].vx = uniform_dist(rng) * 2 - 1;  // Random velocity in [-1, 1]
+                particles[i].vy = uniform_dist(rng) * 2 - 1;
                 particles[i].best_x = particles[i].x;
                 particles[i].best_y = particles[i].y;
                 particles[i].best_fitness = fitness_function(particles[i].x, particles[i].y, settings);
@@ -82,9 +93,24 @@ namespace algos {
                 this->cycles.pop();
             }
         }
+
+        void trim_cycles() {
+            if (config.max_history > 0) {
+                while ((int)cycles.size() > config.max_history) {
+                    pso::StoredCycle oldest = cycles.top();
+                    cycles.pop();
+                    if ((int)cycles.size() < (int)config.max_history) {
+                        cycles.push(oldest);
+                        break;
+                    }
+                    delete[] oldest.particles;
+                }
+            }
+        }
     public:
-        PSO(FitnessFunction func, pso::PSOConfig cfg) : config(cfg) {
+        PSO(FitnessFunction func, pso::PSOConfig cfg) : config(cfg), uniform_dist(0.0, 1.0) {
             this->fitness_function = std::move(func);
+            rng.seed(std::random_device{}());
             pso::Particle* temp = initialise_particles(config.n_particles, &config);
             cycles.push({temp, 0, config.n_particles});
         };
@@ -102,21 +128,26 @@ namespace algos {
             }
             pso::StoredCycle next_cycle = create_stored_cycle(cycles.top().particles, cycles.top().iterations+1, this->config.n_particles);
             pso::Particle* particles = next_cycle.particles;
+
+            #pragma omp parallel for schedule(static)
             for (int i = 0; i < config.n_particles; i++) {
-                double r1 = (double) (rand()) / ((double) (RAND_MAX));
-                double r2 = (double) (rand()) / ((double) (RAND_MAX));
+                double r1 = uniform_dist(rng);
+                double r2 = uniform_dist(rng);
 
-                double cognitive_component_x = config.cognitive_factor * r1 * (particles[i].best_x - particles[i].x);
-                double cognitive_component_y = config.cognitive_factor * r1 * (particles[i].best_y - particles[i].y);
+                particles[i].vx = config.inertia_weight * particles[i].vx +
+                                 config.cognitive_factor * r1 * (particles[i].best_x - particles[i].x) +
+                                 config.social_factor * r2 * (config.global_best_x - particles[i].x);
 
-                double social_component_x = config.social_factor * r2 * (config.global_best_x - particles[i].x);
-                double social_component_y = config.social_factor * r2 * (config.global_best_y - particles[i].y);
+                particles[i].vy = config.inertia_weight * particles[i].vy +
+                                 config.cognitive_factor * r1 * (particles[i].best_y - particles[i].y) +
+                                 config.social_factor * r2 * (config.global_best_y - particles[i].y);
 
-                double new_x = particles[i].x + config.inertia_weight + cognitive_component_x + social_component_x;
-                double new_y = particles[i].y + config.inertia_weight + cognitive_component_y + social_component_y;
+                double new_x = particles[i].x + particles[i].vx;
+                double new_y = particles[i].y + particles[i].vy;
 
 #ifndef NDEBUG
-                printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
+                if (i < 3)
+                    printf("Particle %d: x = %f, y = %f, new_x = %f, new_y = %f\n", i, particles[i].x, particles[i].y, new_x, new_y);
 #endif
                 double new_fitness = fitness_function(new_x, new_y, &this->config);
                 if (new_fitness < particles[i].best_fitness) {
@@ -125,15 +156,21 @@ namespace algos {
                     particles[i].best_fitness = new_fitness;
                 }
                 if (new_fitness < config.global_best_fitness) {
-                    config.global_best_x = new_x;
-                    config.global_best_y = new_y;
-                    config.global_best_fitness = new_fitness;
+                    #pragma omp critical
+                    {
+                        if (new_fitness < config.global_best_fitness) {
+                            config.global_best_x = new_x;
+                            config.global_best_y = new_y;
+                            config.global_best_fitness = new_fitness;
+                        }
+                    }
                 }
                 particles[i].x = new_x;
                 particles[i].y = new_y;
             }
 
-            cycles.push( next_cycle);
+            cycles.push(next_cycle);
+            trim_cycles();  // Enforce max history limit
         };
 
         void backward_step() override {
@@ -316,6 +353,12 @@ namespace algos {
             ImGui::InputInt("Min Y", &config.min_y, -100.0, 100.0);
             ImGui::InputInt("Max Y", &config.max_y, -100.0, 100.0);
             ImGui::InputInt("Max Iterations", &config.max_iterations, 1, 10000);
+            ImGui::InputInt("Max History (limit memory)", &config.max_history, 10, 100);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted("Limit stored cycles to save memory. Set to -1 for unlimited.");
+                ImGui::EndTooltip();
+            }
         };
 
         const AppConfig& get_config() override {
@@ -361,27 +404,51 @@ namespace algos {
 
         void plot() override {
             std::string title = this->get_title();
-            ImPlot::SetNextAxesLimits(config.min_x, config.max_x, config.min_y, config.max_y);
+
+            double center_x = 0.0;
+            double center_y = 0.0;
+            for (int i = 0; i < config.n_particles; ++i) {
+                center_x += cycles.top().particles[i].x;
+                center_y += cycles.top().particles[i].y;
+            }
+            center_x /= config.n_particles;
+            center_y /= config.n_particles;
+
+            double dx = std::abs(config.goal_x - center_x);
+            double dy = std::abs(config.goal_y - center_y);
+            double max_distance = std::max(dx, dy);
+
+            double padding = max_distance * 0.5;
+            double view_half_width = std::max(max_distance + padding, 30.0);
+
+            double plot_min_x = config.goal_x - view_half_width;
+            double plot_max_x = config.goal_x + view_half_width;
+            double plot_min_y = config.goal_y - view_half_width;
+            double plot_max_y = config.goal_y + view_half_width;
+
+            ImPlot::SetNextAxesLimits(plot_min_x, plot_max_x, plot_min_y, plot_max_y);
             if (ImPlot::BeginPlot(title.c_str(), "X", "Y", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y),
                                    ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoFrame)) {
 
-                auto* xs = new double[config.n_particles];
-                auto* ys = new double[config.n_particles];
-                for (int i = 0; i < config.n_particles; i++) {
-                    xs[i] = cycles.top().particles[i].x;
-                    ys[i] = cycles.top().particles[i].y;
+                // For large swarms, sample particles to avoid rendering performance issues
+                int particles_to_render = config.n_particles;
+                int sample_rate = 1;
+                if (config.n_particles > 5000) {
+                    sample_rate = config.n_particles / 5000;
+                    particles_to_render = (config.n_particles + sample_rate - 1) / sample_rate;
                 }
 
-                ImPlot::PlotScatter("Particles", xs, ys, config.n_particles);
-
-                double center_x = 0.0;
-                double center_y = 0.0;
-                for (int i = 0; i < config.n_particles; ++i) {
-                    center_x += cycles.top().particles[i].x;
-                    center_y += cycles.top().particles[i].y;
+                auto* xs = new double[particles_to_render];
+                auto* ys = new double[particles_to_render];
+                int rendered = 0;
+                for (int i = 0; i < config.n_particles; i += sample_rate) {
+                    xs[rendered] = cycles.top().particles[i].x;
+                    ys[rendered] = cycles.top().particles[i].y;
+                    rendered++;
                 }
-                center_x /= config.n_particles;
-                center_y /= config.n_particles;
+
+                ImPlot::PlotScatter("Particles", xs, ys, rendered);
+
                 double center_xs[1] = {center_x};
                 double center_ys[1] = {center_y};
                 ImPlot::PushStyleColor(ImPlotCol_MarkerFill, ImVec4(0.20f, 0.50f, 1.00f, 1.00f));
@@ -403,6 +470,8 @@ namespace algos {
                 }
 
                 ImPlot::EndPlot();
+                delete[] xs;
+                delete[] ys;
                                    };
         };
 
